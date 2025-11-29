@@ -17,8 +17,19 @@ async function getSheetData(range = 'Blad1') {
     
     const text = await response.text();
     
+    // Check if we got a valid response before parsing
+    if (!text || text.length < 50) {
+      throw new Error('Invalid response from Google Sheets');
+    }
+    
     // Parse the Google Visualization API response (removes wrapper)
     const jsonData = JSON.parse(text.substring(47).slice(0, -2));
+    
+    // Check if we have valid data structure
+    if (!jsonData.table || !jsonData.table.rows) {
+      throw new Error('Invalid data structure from Google Sheets');
+    }
+    
     const rows = jsonData.table.rows;
     
     // Convert to simple array format - handle empty cells properly

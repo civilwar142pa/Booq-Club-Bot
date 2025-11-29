@@ -365,6 +365,7 @@ client.on("messageCreate", async (message) => {
           `\`!currentpoint\` - Show where we're reading up to\n` +
           `\`!setpoint <description>\` - Set reading point\n` +
           `\`!setmeeting <date> <time>\` - Set next meeting & create event (UK time)\n` +
+          `\`!clearevent\` - Clear the current meeting and delete Discord event\n` +
           `\`!link\` - Get the link to the spreadsheet\n` +
           `\`!timehelp\` - Show date/time format help\n` +
           `\`!status\` - Check bot status and uptime\n` +
@@ -482,6 +483,52 @@ client.on("messageCreate", async (message) => {
         );
         return;
       }
+      case "clearevent":
+  try {
+    let responseMessage = "";
+    
+    // Check if there's an event to delete
+    if (meetingInfo.eventId) {
+      try {
+        const guild = message.guild;
+        if (guild) {
+          const event = await guild.scheduledEvents.fetch(meetingInfo.eventId);
+          await event.delete();
+          responseMessage += "✅ **Discord event deleted**\n";
+        }
+      } catch (error) {
+        console.log("Event not found or already deleted:", error.message);
+        responseMessage += "⚠️ *Discord event was not found (may have been deleted already)*\n";
+      }
+    }
+    
+    // Clear the stored meeting info
+    const oldMeetingInfo = { ...meetingInfo };
+    
+    meetingInfo = {
+      date: null,
+      time: null,
+      eventId: null,
+      isoDate: null,
+    };
+    
+    // Update storage
+    storage.meetingInfo = meetingInfo;
+    saveStorage(storage);
+    
+    responseMessage += "✅ **Meeting data cleared!**\n";
+    
+    if (oldMeetingInfo.date) {
+      responseMessage += `*Cleared: ${oldMeetingInfo.date}${oldMeetingInfo.time ? ` at ${oldMeetingInfo.time}` : ''}*`;
+    }
+    
+    message.reply(responseMessage);
+    
+  } catch (error) {
+    console.error("Error clearing event:", error);
+    message.reply("❌ Sorry, there was an error clearing the event data.");
+  }
+  break;
 
       // Simple parsing - you might want to improve this based on common patterns
       let dateStr, timeStr;
