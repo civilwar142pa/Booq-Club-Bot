@@ -5,9 +5,20 @@ const SPREADSHEET_ID = '1TRraVAkBbpZHz0oLLe0TRkx9i8F4OwAUMkP4gm74nYs';
 async function getGoogleSheetsClient() {
   if (process.env.GOOGLE_API_KEY) {
     console.log('Using Google API Key for Sheets access');
+    // Create a simple client that will pass API key as query parameter
+    const auth = {
+      getRequestHeaders: () => ({}),
+      authorizeRequest: async (requestOpts) => {
+        const url = new URL(requestOpts.url);
+        url.searchParams.set('key', process.env.GOOGLE_API_KEY);
+        requestOpts.url = url.toString();
+        return requestOpts;
+      }
+    };
+    
     return google.sheets({ 
       version: 'v4', 
-      auth: process.env.GOOGLE_API_KEY 
+      auth: auth 
     });
   }
   
