@@ -21,12 +21,25 @@ async function getSheetData(range = 'Blad1') {
     const jsonData = JSON.parse(text.substring(47).slice(0, -2));
     const rows = jsonData.table.rows;
     
-    // Convert to simple array format
-    const values = rows.map(row => 
-      row.c.map(cell => cell?.v || cell?.f || '')
-    );
+    // Convert to simple array format - handle empty cells properly
+    const values = rows.map(row => {
+      if (!row.c) return [];
+      return row.c.map(cell => {
+        // Handle different cell value types
+        if (cell === null) return '';
+        if (cell.v !== undefined) return cell.v;
+        if (cell.f !== undefined) return cell.f;
+        return '';
+      });
+    }).filter(row => row.length > 0); // Remove empty rows
     
     console.log(`✅ Successfully fetched ${values.length} rows from public sheet`);
+    
+    // Ensure we have at least headers
+    if (values.length === 0) {
+      return getSampleData();
+    }
+    
     return values;
     
   } catch (error) {
