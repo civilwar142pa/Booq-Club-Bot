@@ -470,7 +470,7 @@ client.on("messageCreate", async (message) => {
       }
       break;
 
-    case "setmeeting":
+        case "setmeeting":
       if (args.length === 0) {
         message.reply(
           "**Usage:** `!setmeeting <date> [time]`\n\n" +
@@ -552,7 +552,54 @@ client.on("messageCreate", async (message) => {
         console.error("Error setting meeting:", error);
         message.reply("❌ Sorry, there was an error setting the meeting.");
       }
-      break; // ← THIS BREAK WAS MISSING!
+      break; // ← MAKE SURE THIS BREAK EXISTS HERE
+
+    case "clearevent":
+      try {
+        let responseMessage = "";
+        
+        // Check if there's an event to delete
+        if (meetingInfo.eventId) {
+          try {
+            const guild = message.guild;
+            if (guild) {
+              const event = await guild.scheduledEvents.fetch(meetingInfo.eventId);
+              await event.delete();
+              responseMessage += "✅ **Discord event deleted**\n";
+            }
+          } catch (error) {
+            console.log("Event not found or already deleted:", error.message);
+            responseMessage += "⚠️ *Discord event was not found (may have been deleted already)*\n";
+          }
+        }
+        
+        // Clear the stored meeting info
+        const oldMeetingInfo = { ...meetingInfo };
+        
+        meetingInfo = {
+          date: null,
+          time: null,
+          eventId: null,
+          isoDate: null,
+        };
+        
+        // Update storage
+        storage.meetingInfo = meetingInfo;
+        saveStorage(storage);
+        
+        responseMessage += "✅ **Meeting data cleared!**\n";
+        
+        if (oldMeetingInfo.date) {
+          responseMessage += `*Cleared: ${oldMeetingInfo.date}${oldMeetingInfo.time ? ` at ${oldMeetingInfo.time}` : ''}*`;
+        }
+        
+        message.reply(responseMessage);
+        
+      } catch (error) {
+        console.error("Error clearing event:", error);
+        message.reply("❌ Sorry, there was an error clearing the event data.");
+      }
+      break;
 
     case "clearevent":
       try {
