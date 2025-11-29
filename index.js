@@ -348,27 +348,35 @@ async function createBookClubEvent(
 }
 
 // COMPLETE MESSAGE HANDLER WITH ALL COMMANDS
-let lastCommandTime = {};
+let commandCount = 0;
 client.on("messageCreate", async (message) => {
-  if (message.author.bot) return;
-  if (!message.content.startsWith(PREFIX)) return;
-
-  // Prevent duplicate command execution within 1 second
-  const now = Date.now();
-  const commandKey = `${message.author.id}-${message.content}`;
+  commandCount++;
+  const currentCount = commandCount;
   
-  if (lastCommandTime[commandKey] && (now - lastCommandTime[commandKey]) < 1000) {
-    console.log(`🚫 Blocked duplicate command: ${message.content}`);
+  if (message.author.bot) {
+    console.log(`🚫 [${currentCount}] Ignored bot message from: ${message.author.tag}`);
     return;
   }
   
-  lastCommandTime[commandKey] = now;
+  if (!message.content.startsWith(PREFIX)) {
+    console.log(`🚫 [${currentCount}] Ignored non-command: ${message.content.substring(0, 30)}...`);
+    return;
+  }
 
+  // DETAILED DEBUG LOGGING
+  console.log(`🔍 [${currentCount}] COMMAND START: "${message.content}"`);
+  console.log(`   Author: ${message.author.tag} (${message.author.id})`);
+  console.log(`   Channel: ${message.channel.id}`);
+  console.log(`   Timestamp: ${Date.now()}`);
+  
   const args = message.content.slice(PREFIX.length).trim().split(/ +/);
   const command = args.shift().toLowerCase();
 
+  console.log(`   Parsed command: ${command}, args: ${args.join(', ')}`);
+
   switch (command) {
     case "commands":
+      console.log(`📋 [${currentCount}] Processing !commands`);
       message.reply(
         `**Booq Club Commands:**\n\n` +
           `\`!reading\` - Show what we're currently reading\n` +
@@ -383,9 +391,11 @@ client.on("messageCreate", async (message) => {
           `\`!status\` - Check bot status and uptime\n` +
           `\`!commands\` - Show this list`,
       );
+      console.log(`🏁 [${currentCount}] !commands completed`);
       break;
 
     case "status":
+      console.log(`📊 [${currentCount}] Processing !status`);
       const uptime = process.uptime();
       const hours = Math.floor(uptime / 3600);
       const minutes = Math.floor((uptime % 3600) / 60);
@@ -404,9 +414,11 @@ client.on("messageCreate", async (message) => {
           `🕒 **Last Update**: ${new Date().toLocaleTimeString()}\n` +
           `📖 **Reading Point**: ${currentPoint || "Not set"}`,
       );
+      console.log(`🏁 [${currentCount}] !status completed`);
       break;
 
     case "reading":
+      console.log(`📚 [${currentCount}] Processing !reading command`);
       try {
         const data = await getSheetData();
         const books = data.slice(1);
@@ -414,21 +426,25 @@ client.on("messageCreate", async (message) => {
           (row) => row[2]?.toLowerCase() === "currently reading",
         );
         if (current) {
+          console.log(`✅ [${currentCount}] Sending reading response`);
           message.reply(
             `**Currently Reading:**\n` +
               `**${current[0]}** by ${current[1]}\n` +
               `${current[3] ? `Link: ${current[3]}` : ""}`,
           );
         } else {
+          console.log(`❌ [${currentCount}] No current book found`);
           message.reply("No book is currently being read!");
         }
       } catch (error) {
-        console.error("Error fetching current book:", error);
+        console.error(`💥 [${currentCount}] Error in reading:`, error);
         message.reply("Sorry, I could not fetch the current book.");
       }
+      console.log(`🏁 [${currentCount}] !reading command completed`);
       break;
 
     case "random":
+      console.log(`🎲 [${currentCount}] Processing !random command`);
       try {
         const data = await getSheetData();
         const books = data.slice(1);
@@ -438,21 +454,25 @@ client.on("messageCreate", async (message) => {
         if (futureOptions.length > 0) {
           const randomIndex = Math.floor(Math.random() * futureOptions.length);
           const picked = futureOptions[randomIndex];
+          console.log(`✅ [${currentCount}] Sending random book response`);
           message.reply(
             `**Random Pick:**\n` +
               `**${picked[0]}** by ${picked[1]}\n` +
               `${picked[3] ? `Link: ${picked[3]}` : ""}`,
           );
         } else {
+          console.log(`❌ [${currentCount}] No future options found`);
           message.reply("No future book options available!");
         }
       } catch (error) {
-        console.error("Error picking random book:", error);
+        console.error(`💥 [${currentCount}] Error in random:`, error);
         message.reply("Sorry, I could not pick a random book.");
       }
+      console.log(`🏁 [${currentCount}] !random command completed`);
       break;
 
     case "nextmeeting":
+      console.log(`📅 [${currentCount}] Processing !nextmeeting`);
       if (meetingInfo.isoDate) {
         const formattedDate = formatMeetingDate(meetingInfo.isoDate);
         let response = `**Next Meeting:**\n${formattedDate}`;
@@ -469,21 +489,26 @@ client.on("messageCreate", async (message) => {
           }
         }
 
+        console.log(`✅ [${currentCount}] Sending meeting info`);
         message.reply(response);
       } else if (meetingInfo.date) {
-        // Fallback to old format if exists
+        console.log(`✅ [${currentCount}] Sending fallback meeting info`);
         message.reply(
           `**Next Meeting:**\n${meetingInfo.date}${meetingInfo.time ? ` at ${meetingInfo.time}` : ""} (UK time)`,
         );
       } else {
+        console.log(`❌ [${currentCount}] No meeting scheduled`);
         message.reply(
           "No meeting scheduled yet. Use `!setmeeting <date> <time>` to set one.",
         );
       }
+      console.log(`🏁 [${currentCount}] !nextmeeting completed`);
       break;
 
-        case "setmeeting":
+    case "setmeeting":
+      console.log(`📅 [${currentCount}] Processing !setmeeting`);
       if (args.length === 0) {
+        console.log(`ℹ️ [${currentCount}] Showing setmeeting help`);
         message.reply(
           "**Usage:** `!setmeeting <date> [time]`\n\n" +
             "**Examples (UK Time):**\n" +
@@ -496,10 +521,8 @@ client.on("messageCreate", async (message) => {
         return;
       }
 
-      // Simple parsing - you might want to improve this based on common patterns
       let dateStr, timeStr;
       if (args.length >= 2) {
-        // Check if last argument looks like a time
         const lastArg = args[args.length - 1].toLowerCase();
         if (
           lastArg.includes("pm") ||
@@ -513,25 +536,27 @@ client.on("messageCreate", async (message) => {
         dateStr = args[0];
       }
 
+      console.log(`   Date: ${dateStr}, Time: ${timeStr}`);
+
       try {
         const parsedDate = parseMeetingDateTime(dateStr, timeStr);
 
         if (!parsedDate.isValid) {
+          console.log(`❌ [${currentCount}] Invalid date format`);
           return message.reply(
             '❌ Could not understand that date/time. Try formats like "December 15 7pm" or "next friday"',
           );
         }
 
         if (parsedDate <= DateTime.now().setZone(DEFAULT_TIMEZONE)) {
+          console.log(`❌ [${currentCount}] Date in past`);
           return message.reply("❌ Please set a meeting time in the future.");
         }
 
-        // Store both human-readable and ISO format
         meetingInfo.date = parsedDate.toLocaleString(DateTime.DATE_FULL);
         meetingInfo.time = parsedDate.toLocaleString(DateTime.TIME_SIMPLE);
         meetingInfo.isoDate = parsedDate.toISO();
 
-        // Try to create Discord event
         let eventResponse = "";
         try {
           if (message.guild) {
@@ -547,77 +572,31 @@ client.on("messageCreate", async (message) => {
             eventResponse = `\n⚠️ *Could not create event (not in a server)*`;
           }
         } catch (error) {
-          console.error("Failed to create event:", error);
+          console.error(`⚠️ [${currentCount}] Failed to create event:`, error);
           eventResponse = `\n⚠️ *Could not create Discord event (missing permissions)*`;
         }
 
-        // Save to storage
         storage.meetingInfo = meetingInfo;
         saveStorage(storage);
 
+        console.log(`✅ [${currentCount}] Meeting set successfully`);
         message.reply(
           `✅ **Meeting set!**\n` +
             `**When:** ${formatMeetingDate(meetingInfo.isoDate)}` +
             eventResponse,
         );
       } catch (error) {
-        console.error("Error setting meeting:", error);
+        console.error(`💥 [${currentCount}] Error setting meeting:`, error);
         message.reply("❌ Sorry, there was an error setting the meeting.");
       }
-      break; // ← MAKE SURE THIS BREAK EXISTS HERE
-
-    case "clearevent":
-      try {
-        let responseMessage = "";
-        
-        // Check if there's an event to delete
-        if (meetingInfo.eventId) {
-          try {
-            const guild = message.guild;
-            if (guild) {
-              const event = await guild.scheduledEvents.fetch(meetingInfo.eventId);
-              await event.delete();
-              responseMessage += "✅ **Discord event deleted**\n";
-            }
-          } catch (error) {
-            console.log("Event not found or already deleted:", error.message);
-            responseMessage += "⚠️ *Discord event was not found (may have been deleted already)*\n";
-          }
-        }
-        
-        // Clear the stored meeting info
-        const oldMeetingInfo = { ...meetingInfo };
-        
-        meetingInfo = {
-          date: null,
-          time: null,
-          eventId: null,
-          isoDate: null,
-        };
-        
-        // Update storage
-        storage.meetingInfo = meetingInfo;
-        saveStorage(storage);
-        
-        responseMessage += "✅ **Meeting data cleared!**\n";
-        
-        if (oldMeetingInfo.date) {
-          responseMessage += `*Cleared: ${oldMeetingInfo.date}${oldMeetingInfo.time ? ` at ${oldMeetingInfo.time}` : ''}*`;
-        }
-        
-        message.reply(responseMessage);
-        
-      } catch (error) {
-        console.error("Error clearing event:", error);
-        message.reply("❌ Sorry, there was an error clearing the event data.");
-      }
+      console.log(`🏁 [${currentCount}] !setmeeting completed`);
       break;
 
     case "clearevent":
+      console.log(`🗑️ [${currentCount}] Processing !clearevent`);
       try {
         let responseMessage = "";
         
-        // Check if there's an event to delete
         if (meetingInfo.eventId) {
           try {
             const guild = message.guild;
@@ -625,14 +604,14 @@ client.on("messageCreate", async (message) => {
               const event = await guild.scheduledEvents.fetch(meetingInfo.eventId);
               await event.delete();
               responseMessage += "✅ **Discord event deleted**\n";
+              console.log(`✅ [${currentCount}] Discord event deleted`);
             }
           } catch (error) {
-            console.log("Event not found or already deleted:", error.message);
+            console.log(`⚠️ [${currentCount}] Event not found:`, error.message);
             responseMessage += "⚠️ *Discord event was not found (may have been deleted already)*\n";
           }
         }
         
-        // Clear the stored meeting info
         const oldMeetingInfo = { ...meetingInfo };
         
         meetingInfo = {
@@ -642,7 +621,6 @@ client.on("messageCreate", async (message) => {
           isoDate: null,
         };
         
-        // Update storage
         storage.meetingInfo = meetingInfo;
         saveStorage(storage);
         
@@ -652,26 +630,34 @@ client.on("messageCreate", async (message) => {
           responseMessage += `*Cleared: ${oldMeetingInfo.date}${oldMeetingInfo.time ? ` at ${oldMeetingInfo.time}` : ''}*`;
         }
         
+        console.log(`✅ [${currentCount}] Meeting data cleared`);
         message.reply(responseMessage);
         
       } catch (error) {
-        console.error("Error clearing event:", error);
+        console.error(`💥 [${currentCount}] Error clearing event:`, error);
         message.reply("❌ Sorry, there was an error clearing the event data.");
       }
+      console.log(`🏁 [${currentCount}] !clearevent completed`);
       break;
 
     case "currentpoint":
+      console.log(`📖 [${currentCount}] Processing !currentpoint`);
       if (currentPoint) {
+        console.log(`✅ [${currentCount}] Sending current point`);
         message.reply(`**Reading up to:** ${currentPoint}`);
       } else {
+        console.log(`❌ [${currentCount}] No reading point set`);
         message.reply(
           "No reading point set yet. Use `!setpoint <description>` to set one.",
         );
       }
+      console.log(`🏁 [${currentCount}] !currentpoint completed`);
       break;
 
     case "setpoint":
+      console.log(`📝 [${currentCount}] Processing !setpoint`);
       if (args.length === 0) {
+        console.log(`ℹ️ [${currentCount}] Showing setpoint help`);
         message.reply(
           "**Usage:** `!setpoint <description>`\n\n" +
             "**Examples:**\n" +
@@ -689,18 +675,23 @@ client.on("messageCreate", async (message) => {
       storage.readingPoint = newPoint;
       saveStorage(storage);
 
+      console.log(`✅ [${currentCount}] Reading point updated: ${newPoint}`);
       message.reply(
         `✅ **Reading point updated!**\n**Read until:** ${currentPoint}`,
       );
+      console.log(`🏁 [${currentCount}] !setpoint completed`);
       break;
 
     case "link":
+      console.log(`🔗 [${currentCount}] Processing !link`);
       message.reply(
         `**Booq Club Spreadsheet:**\nhttps://docs.google.com/spreadsheets/d/1TRraVAkBbpZHz0oLLe0TRkx9i8F4OwAUMkP4gm74nYs/edit`,
       );
+      console.log(`🏁 [${currentCount}] !link completed`);
       break;
 
     case "timehelp":
+      console.log(`⏰ [${currentCount}] Processing !timehelp`);
       message.reply(
         "**Date/Time Formats I Understand (UK Time):**\n\n" +
           "**Dates:**\n" +
@@ -718,6 +709,11 @@ client.on("messageCreate", async (message) => {
           "• `!setmeeting 2024-12-15 19:00`\n\n" +
           "*All times are UK time*",
       );
+      console.log(`🏁 [${currentCount}] !timehelp completed`);
+      break;
+
+    default:
+      console.log(`❓ [${currentCount}] Unknown command: ${command}`);
       break;
   }
 });
