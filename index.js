@@ -348,9 +348,21 @@ async function createBookClubEvent(
 }
 
 // COMPLETE MESSAGE HANDLER WITH ALL COMMANDS
+let lastCommandTime = {};
 client.on("messageCreate", async (message) => {
   if (message.author.bot) return;
   if (!message.content.startsWith(PREFIX)) return;
+
+  // Prevent duplicate command execution within 1 second
+  const now = Date.now();
+  const commandKey = `${message.author.id}-${message.content}`;
+  
+  if (lastCommandTime[commandKey] && (now - lastCommandTime[commandKey]) < 1000) {
+    console.log(`🚫 Blocked duplicate command: ${message.content}`);
+    return;
+  }
+  
+  lastCommandTime[commandKey] = now;
 
   const args = message.content.slice(PREFIX.length).trim().split(/ +/);
   const command = args.shift().toLowerCase();
