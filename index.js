@@ -552,7 +552,7 @@ client.on("messageCreate", async (message) => {
         console.error("Error setting meeting:", error);
         message.reply("❌ Sorry, there was an error setting the meeting.");
       }
-      break;
+      break; // ← THIS BREAK WAS MISSING!
 
     case "clearevent":
       try {
