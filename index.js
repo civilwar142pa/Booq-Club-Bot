@@ -322,19 +322,19 @@ function formatMeetingDate(isoDate) {
 async function createBookClubEvent(
   guild,
   dateTime,
-  description = "Book Club Meeting",
+  description = "Booq Club Meeting",
 ) {
   try {
     const startTime = dateTime.toJSDate();
     const endTime = dateTime.plus({ hours: 2 }).toJSDate(); // 2 hours later
 
     const event = await guild.scheduledEvents.create({
-      name: "📚 Book Club Meeting",
+      name: "📚 Booq Club Meeting",
       scheduledStartTime: startTime,
       scheduledEndTime: endTime,
       privacyLevel: 2, // GUILD_ONLY
       entityType: 3, // EXTERNAL
-      description: `${description}\n\nSet by Book Club Bot (UK Time)`,
+      description: `${description}\n\nSet by Booq Club Bot (UK Time)`,
       entityMetadata: {
         location: "Voice Channel",
       },
@@ -563,7 +563,7 @@ client.on("messageCreate", async (message) => {
             const event = await createBookClubEvent(
               message.guild,
               parsedDate,
-              `Book Club Discussion - ${parsedDate.toLocaleString(DateTime.DATETIME_FULL)}`,
+              `Booq Club Discussion - ${parsedDate.toLocaleString(DateTime.DATETIME_FULL)}`,
             );
 
             meetingInfo.eventId = event.id;
