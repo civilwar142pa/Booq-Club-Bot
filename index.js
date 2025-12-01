@@ -376,16 +376,40 @@ client.on("messageCreate", async (message) => {
 
   switch (command) {
     case "theirserver":
-  // SIMPLE TEST VERSION
-  message.reply(`✅ Test command working! Server ID: ${process.env.TARGET_GUILD_ID || "Not set"}`);
-  break;
-
-case "syncmembers":
-  message.reply("✅ Sync command placeholder - not implemented yet");
-  break;
-
-case "listchannels":
-  message.reply("✅ List channels placeholder - not implemented yet");
+  try {
+    console.log("theirserver command called");
+    
+    const targetGuildId = process.env.TARGET_GUILD_ID;
+    console.log("Target Guild ID:", targetGuildId);
+    
+    if (!targetGuildId) {
+      return message.reply("❌ TARGET_GUILD_ID not set in environment.");
+    }
+    
+    // Check if client is ready
+    if (!client.isReady()) {
+      return message.reply("🔄 Bot is still connecting to Discord...");
+    }
+    
+    console.log("Client ready, checking guilds cache size:", client.guilds.cache.size);
+    
+    // Try to get the guild
+    const guild = client.guilds.cache.get(targetGuildId);
+    
+    if (!guild) {
+      console.log("Guild not found in cache");
+      return message.reply(`❌ Bot is not in server: ${targetGuildId}\n\nAdd bot using: https://discord.com/api/oauth2/authorize?client_id=YOUR_CLIENT_ID&permissions=8650207236&scope=bot`);
+    }
+    
+    console.log("Guild found:", guild.name);
+    
+    // Simple response
+    message.reply(`✅ Connected to **${guild.name}** (${guild.memberCount} members)`);
+    
+  } catch (error) {
+    console.error("Error in theirserver:", error);
+    message.reply(`❌ Error: ${error.message}`);
+  }
   break;
   
     case "commands":
