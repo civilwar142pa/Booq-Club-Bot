@@ -71,7 +71,7 @@ class UptimeRobotMonitor {
         `⚠️ UptimeRobot heartbeat error: ${error.message} - Attempt ${this.failCount}/${this.maxFails}`,
       );
 
-      // Disable after too many failures
+      // Disable after too many failures to avoid spam
       if (this.failCount >= this.maxFails) {
         console.error(
           "🔴 UptimeRobot heartbeat disabled due to repeated failures",
@@ -96,7 +96,7 @@ class UptimeRobotMonitor {
     // Send initial heartbeat
     this.sendHeartbeat();
 
-    // Send regular heartbeats
+    // Set up regular heartbeats
     this.heartbeatInterval = setInterval(() => {
       this.sendHeartbeat();
     }, interval);
@@ -113,7 +113,7 @@ class UptimeRobotMonitor {
 // Initialize UptimeRobot monitor
 const uptimeMonitor = new UptimeRobotMonitor();
 
-// Express Server - internal keep-alive
+// SIMPLE EXPRESS SERVER FOR INTERNAL USE
 const app = express();
 const port = 3000;
 
@@ -129,21 +129,21 @@ app.get("/", (req, res) => {
     guilds: client?.guilds?.cache?.size || 0,
     currentPoint: currentPoint,
     nextMeeting: meetingInfo.date,
-    // specific keyword for monitoring
+    // Add a specific keyword for monitoring
     monitor: "BOOK_CLUB_BOT_ACTIVE",
   });
 });
 
-// dedicated health endpoint
+// Add a dedicated health endpoint with simple text response
 app.get("/health", (req, res) => {
   const botStatus = client?.isReady() ? "connected" : "disconnected";
 
-  // text response for uptime monitoring services
+  // Simple text response that's easy to monitor
   res.send(`BOOK_CLUB_BOT_OK|${botStatus}|${Math.floor(process.uptime())}s`);
 });
 
 app.get("/monitor", (req, res) => {
-  // ultra-simple endpoint
+  // Ultra-simple endpoint just for monitoring
   res.send("BOOK_CLUB_BOT_ACTIVE");
 });
 
@@ -153,7 +153,7 @@ app.listen(process.env.PORT || port, '0.0.0.0', () => {
   console.log(`Server running on port ${process.env.PORT || port}`);
 });
 
-// robust keep-alive and bot logic
+// ROBUST BOT WITH SELF-KEEP-ALIVE
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -168,7 +168,7 @@ const PREFIX = "!";
 // Set timezone to UK
 const DEFAULT_TIMEZONE = "Europe/London";
 
-// bot initialization with auto-restart
+// Enhanced bot initialization with auto-restart
 async function initializeBot() {
   while (true) {
     try {
@@ -247,7 +247,7 @@ setInterval(internalKeepAlive, 3 * 60 * 1000);
 // Start internal pinging after 30 seconds
 setTimeout(internalKeepAlive, 30000);
 
-// Date parsing with UK timezone
+// Improved date parsing with UK timezone
 function parseMeetingDateTime(dateStr, timeStr) {
   const combined = timeStr ? `${dateStr} ${timeStr}` : dateStr;
 
@@ -347,7 +347,7 @@ async function createBookClubEvent(
   }
 }
 
-// MESSAGE HANDLING WITH ALL COMMANDS / DEBUG LOGGING
+// COMPLETE MESSAGE HANDLER WITH ALL COMMANDS
 let commandCount = 0;
 client.on("messageCreate", async (message) => {
   commandCount++;
@@ -375,7 +375,6 @@ client.on("messageCreate", async (message) => {
   console.log(`   Parsed command: ${command}, args: ${args.join(', ')}`);
 
   switch (command) {
-   
     case "commands":
       console.log(`📋 [${currentCount}] Processing !commands`);
       message.reply(
@@ -719,7 +718,7 @@ client.on("messageCreate", async (message) => {
   }
 });
 
-// error handling
+// ENHANCED ERROR HANDLING
 process.on("unhandledRejection", (error) => {
   console.error("🔴 Unhandled Promise Rejection:", error);
 });
@@ -739,7 +738,7 @@ client.on("reconnecting", () => {
   console.log("🔄 Bot reconnecting...");
 });
 
-// shutdown handling
+// Graceful shutdown
 process.on("SIGINT", () => {
   console.log("🛑 Shutting down gracefully...");
   uptimeMonitor.stopHeartbeats();
