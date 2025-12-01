@@ -376,108 +376,16 @@ client.on("messageCreate", async (message) => {
 
   switch (command) {
     case "theirserver":
-  try {
-    const targetGuildId = process.env.TARGET_GUILD_ID;
-    
-    if (!targetGuildId) {
-      return message.reply("Target server not configured.");
-    }
-
-    // Check if your bot is in their server
-    const targetGuild = client.guilds.cache.get(targetGuildId);
-    
-    if (!targetGuild) {
-      return message.reply("❌ My bot is not in that server. Use the invite link to add me.");
-    }
-
-    const memberCount = targetGuild.memberCount;
-    const channelCount = targetGuild.channels.cache.size;
-    const serverName = targetGuild.name;
-    const owner = targetGuild.members.cache.get(targetGuild.ownerId)?.user.tag || "Unknown";
-    
-    message.reply(
-      `**Server Info:** ${serverName}\n` +
-      `👥 **Members:** ${memberCount}\n` +
-      `📁 **Channels:** ${channelCount}\n` +
-      `👑 **Owner:** ${owner}\n` +
-      `🆔 **ID:** ${targetGuildId}`
-    );
-  } catch (error) {
-    console.error("Server info error:", error);
-    message.reply("❌ Could not fetch server info.");
-  }
+  // SIMPLE TEST VERSION
+  message.reply(`✅ Test command working! Server ID: ${process.env.TARGET_GUILD_ID || "Not set"}`);
   break;
 
 case "syncmembers":
-  try {
-    const targetGuildId = process.env.TARGET_GUILD_ID;
-    
-    if (!targetGuildId) {
-      return message.reply("Target server not configured.");
-    }
-
-    const targetGuild = client.guilds.cache.get(targetGuildId);
-    
-    if (!targetGuild) {
-      return message.reply("❌ Bot not in that server.");
-    }
-
-    // Fetch all members (this might take a moment)
-    await targetGuild.members.fetch();
-    const members = targetGuild.members.cache;
-    
-    const humanMembers = members.filter(m => !m.user.bot);
-    const botMembers = members.filter(m => m.user.bot);
-    
-    message.reply(
-      `**Member Sync Complete:**\n` +
-      `👥 **Total Members:** ${members.size}\n` +
-      `👤 **Humans:** ${humanMembers.size}\n` +
-      `🤖 **Bots:** ${botMembers.size}\n` +
-      `✅ **Last synced:** ${new Date().toLocaleTimeString()}`
-    );
-  } catch (error) {
-    console.error("Sync error:", error);
-    message.reply("❌ Failed to sync members.");
-  }
+  message.reply("✅ Sync command placeholder - not implemented yet");
   break;
 
 case "listchannels":
-  try {
-    const targetGuildId = process.env.TARGET_GUILD_ID;
-    
-    if (!targetGuildId) {
-      return message.reply("Target server not configured.");
-    }
-
-    const targetGuild = client.guilds.cache.get(targetGuildId);
-    
-    if (!targetGuild) {
-      return message.reply("❌ Bot not in that server.");
-    }
-
-    const channels = targetGuild.channels.cache;
-    const textChannels = channels.filter(c => c.type === 0).map(c => `#${c.name}`);
-    const voiceChannels = channels.filter(c => c.type === 2).map(c => `🔊 ${c.name}`);
-    
-    let response = `**Channels in ${targetGuild.name}:**\n\n`;
-    
-    if (textChannels.length > 0) {
-      response += `**Text Channels:**\n${textChannels.slice(0, 10).join(', ')}`;
-      if (textChannels.length > 10) response += `, and ${textChannels.length - 10} more...`;
-      response += '\n\n';
-    }
-    
-    if (voiceChannels.length > 0) {
-      response += `**Voice Channels:**\n${voiceChannels.slice(0, 10).join(', ')}`;
-      if (voiceChannels.length > 10) response += `, and ${voiceChannels.length - 10} more...`;
-    }
-    
-    message.reply(response);
-  } catch (error) {
-    console.error("Channels error:", error);
-    message.reply("❌ Failed to list channels.");
-  }
+  message.reply("✅ List channels placeholder - not implemented yet");
   break;
   
     case "commands":
