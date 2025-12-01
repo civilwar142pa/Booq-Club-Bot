@@ -71,7 +71,7 @@ class UptimeRobotMonitor {
         `⚠️ UptimeRobot heartbeat error: ${error.message} - Attempt ${this.failCount}/${this.maxFails}`,
       );
 
-      // Disable after too many failures to avoid spam
+      // Disable after too many failures
       if (this.failCount >= this.maxFails) {
         console.error(
           "🔴 UptimeRobot heartbeat disabled due to repeated failures",
@@ -96,7 +96,7 @@ class UptimeRobotMonitor {
     // Send initial heartbeat
     this.sendHeartbeat();
 
-    // Set up regular heartbeats
+    // Send regular heartbeats
     this.heartbeatInterval = setInterval(() => {
       this.sendHeartbeat();
     }, interval);
@@ -113,7 +113,7 @@ class UptimeRobotMonitor {
 // Initialize UptimeRobot monitor
 const uptimeMonitor = new UptimeRobotMonitor();
 
-// SIMPLE EXPRESS SERVER FOR INTERNAL USE
+// Express Server - internal keep-alive
 const app = express();
 const port = 3000;
 
@@ -129,21 +129,21 @@ app.get("/", (req, res) => {
     guilds: client?.guilds?.cache?.size || 0,
     currentPoint: currentPoint,
     nextMeeting: meetingInfo.date,
-    // Add a specific keyword for monitoring
+    // specific keyword for monitoring
     monitor: "BOOK_CLUB_BOT_ACTIVE",
   });
 });
 
-// Add a dedicated health endpoint with simple text response
+// dedicated health endpoint
 app.get("/health", (req, res) => {
   const botStatus = client?.isReady() ? "connected" : "disconnected";
 
-  // Simple text response that's easy to monitor
+  // text response for uptime monitoring services
   res.send(`BOOK_CLUB_BOT_OK|${botStatus}|${Math.floor(process.uptime())}s`);
 });
 
 app.get("/monitor", (req, res) => {
-  // Ultra-simple endpoint just for monitoring
+  // ultra-simple endpoint
   res.send("BOOK_CLUB_BOT_ACTIVE");
 });
 
@@ -153,7 +153,7 @@ app.listen(process.env.PORT || port, '0.0.0.0', () => {
   console.log(`Server running on port ${process.env.PORT || port}`);
 });
 
-// ROBUST BOT WITH SELF-KEEP-ALIVE
+// robust keep-alive and bot logic
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -168,7 +168,7 @@ const PREFIX = "!";
 // Set timezone to UK
 const DEFAULT_TIMEZONE = "Europe/London";
 
-// Enhanced bot initialization with auto-restart
+// bot initialization with auto-restart
 async function initializeBot() {
   while (true) {
     try {
@@ -247,7 +247,7 @@ setInterval(internalKeepAlive, 3 * 60 * 1000);
 // Start internal pinging after 30 seconds
 setTimeout(internalKeepAlive, 30000);
 
-// Improved date parsing with UK timezone
+// Date parsing with UK timezone
 function parseMeetingDateTime(dateStr, timeStr) {
   const combined = timeStr ? `${dateStr} ${timeStr}` : dateStr;
 
@@ -347,7 +347,7 @@ async function createBookClubEvent(
   }
 }
 
-// COMPLETE MESSAGE HANDLER WITH ALL COMMANDS
+// MESSAGE HANDLING WITH ALL COMMANDS / DEBUG LOGGING
 let commandCount = 0;
 client.on("messageCreate", async (message) => {
   commandCount++;
@@ -375,6 +375,111 @@ client.on("messageCreate", async (message) => {
   console.log(`   Parsed command: ${command}, args: ${args.join(', ')}`);
 
   switch (command) {
+    case "theirserver":
+  try {
+    const targetGuildId = process.env.TARGET_GUILD_ID;
+    
+    if (!targetGuildId) {
+      return message.reply("Target server not configured.");
+    }
+
+    // Check if your bot is in their server
+    const targetGuild = client.guilds.cache.get(targetGuildId);
+    
+    if (!targetGuild) {
+      return message.reply("❌ My bot is not in that server. Use the invite link to add me.");
+    }
+
+    const memberCount = targetGuild.memberCount;
+    const channelCount = targetGuild.channels.cache.size;
+    const serverName = targetGuild.name;
+    const owner = targetGuild.members.cache.get(targetGuild.ownerId)?.user.tag || "Unknown";
+    
+    message.reply(
+      `**Server Info:** ${serverName}\n` +
+      `👥 **Members:** ${memberCount}\n` +
+      `📁 **Channels:** ${channelCount}\n` +
+      `👑 **Owner:** ${owner}\n` +
+      `🆔 **ID:** ${targetGuildId}`
+    );
+  } catch (error) {
+    console.error("Server info error:", error);
+    message.reply("❌ Could not fetch server info.");
+  }
+  break;
+
+case "syncmembers":
+  try {
+    const targetGuildId = process.env.TARGET_GUILD_ID;
+    
+    if (!targetGuildId) {
+      return message.reply("Target server not configured.");
+    }
+
+    const targetGuild = client.guilds.cache.get(targetGuildId);
+    
+    if (!targetGuild) {
+      return message.reply("❌ Bot not in that server.");
+    }
+
+    // Fetch all members (this might take a moment)
+    await targetGuild.members.fetch();
+    const members = targetGuild.members.cache;
+    
+    const humanMembers = members.filter(m => !m.user.bot);
+    const botMembers = members.filter(m => m.user.bot);
+    
+    message.reply(
+      `**Member Sync Complete:**\n` +
+      `👥 **Total Members:** ${members.size}\n` +
+      `👤 **Humans:** ${humanMembers.size}\n` +
+      `🤖 **Bots:** ${botMembers.size}\n` +
+      `✅ **Last synced:** ${new Date().toLocaleTimeString()}`
+    );
+  } catch (error) {
+    console.error("Sync error:", error);
+    message.reply("❌ Failed to sync members.");
+  }
+  break;
+
+case "listchannels":
+  try {
+    const targetGuildId = process.env.TARGET_GUILD_ID;
+    
+    if (!targetGuildId) {
+      return message.reply("Target server not configured.");
+    }
+
+    const targetGuild = client.guilds.cache.get(targetGuildId);
+    
+    if (!targetGuild) {
+      return message.reply("❌ Bot not in that server.");
+    }
+
+    const channels = targetGuild.channels.cache;
+    const textChannels = channels.filter(c => c.type === 0).map(c => `#${c.name}`);
+    const voiceChannels = channels.filter(c => c.type === 2).map(c => `🔊 ${c.name}`);
+    
+    let response = `**Channels in ${targetGuild.name}:**\n\n`;
+    
+    if (textChannels.length > 0) {
+      response += `**Text Channels:**\n${textChannels.slice(0, 10).join(', ')}`;
+      if (textChannels.length > 10) response += `, and ${textChannels.length - 10} more...`;
+      response += '\n\n';
+    }
+    
+    if (voiceChannels.length > 0) {
+      response += `**Voice Channels:**\n${voiceChannels.slice(0, 10).join(', ')}`;
+      if (voiceChannels.length > 10) response += `, and ${voiceChannels.length - 10} more...`;
+    }
+    
+    message.reply(response);
+  } catch (error) {
+    console.error("Channels error:", error);
+    message.reply("❌ Failed to list channels.");
+  }
+  break;
+  
     case "commands":
       console.log(`📋 [${currentCount}] Processing !commands`);
       message.reply(
@@ -718,7 +823,7 @@ client.on("messageCreate", async (message) => {
   }
 });
 
-// ENHANCED ERROR HANDLING
+// error handling
 process.on("unhandledRejection", (error) => {
   console.error("🔴 Unhandled Promise Rejection:", error);
 });
@@ -738,7 +843,7 @@ client.on("reconnecting", () => {
   console.log("🔄 Bot reconnecting...");
 });
 
-// Graceful shutdown
+// shutdown handling
 process.on("SIGINT", () => {
   console.log("🛑 Shutting down gracefully...");
   uptimeMonitor.stopHeartbeats();
