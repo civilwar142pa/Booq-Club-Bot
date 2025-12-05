@@ -448,12 +448,12 @@ client.on("messageCreate", async (message) => {
       try {
         const data = await getSheetData();
         const books = data.slice(1);
-        const futureOptions = books.filter(
-          (row) => row[2]?.toLowerCase() === "future option",
+        const topChoices = books.filter(
+          (row) => row[2]?.toLowerCase() === "top choice",
         );
-        if (futureOptions.length > 0) {
-          const randomIndex = Math.floor(Math.random() * futureOptions.length);
-          const picked = futureOptions[randomIndex];
+        if (topChoices.length > 0) {
+          const randomIndex = Math.floor(Math.random() * topChoices.length);
+          const picked = topChoices[randomIndex];
           console.log(`✅ [${currentCount}] Sending random book response`);
           message.reply(
             `**Random Pick:**\n` +
@@ -461,8 +461,8 @@ client.on("messageCreate", async (message) => {
               `${picked[3] ? `Link: ${picked[3]}` : ""}`,
           );
         } else {
-          console.log(`❌ [${currentCount}] No future options found`);
-          message.reply("No future book options available!");
+          console.log(`❌ [${currentCount}] No top choices found`);
+          message.reply("No top choice options available!");
         }
       } catch (error) {
         console.error(`💥 [${currentCount}] Error in random:`, error);
