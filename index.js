@@ -319,27 +319,67 @@ function formatMeetingDate(isoDate) {
 }
 
 // Function to create Discord event
+// Function to create Discord event
 async function createBookClubEvent(
   guild,
   dateTime,
   description = "Booq Club Meeting",
+  voiceChannelId = process.env.1339933313640435774 // Add this parameter
 ) {
   try {
     const startTime = dateTime.toJSDate();
     const endTime = dateTime.plus({ hours: 2 }).toJSDate(); // 2 hours later
 
+    // Try to get the specified voice channel
+    let voiceChannel = null;
+    if (voiceChannelId) {
+      try {
+        voiceChannel = await guild.channels.fetch(voiceChannelId);
+        if (voiceChannel.type !== 2) { // Type 2 is GUILD_VOICE
+          console.warn(`Channel ${voiceChannelId} is not a voice channel, using default`);
+          voiceChannel = null;
+        }
+      } catch (error) {
+        console.warn(`Could not fetch voice channel ${voiceChannelId}:`, error.message);
+      }
+    }
+
+    // If no valid voice channel ID provided, try to find one named "Book Club" or similar
+    if (!voiceChannel) {
+      voiceChannel = guild.channels.cache.find(
+        channel => 
+          channel.type === 2 && // GUILD_VOICE
+          (channel.name.toLowerCase().includes('book') || 
+           channel.name.toLowerCase().includes('club') ||
+           channel.name.toLowerCase().includes('meeting'))
+      );
+      
+      // If still not found, use first available voice channel
+      if (!voiceChannel) {
+        const voiceChannels = guild.channels.cache.filter(ch => ch.type === 2);
+        if (voiceChannels.size > 0) {
+          voiceChannel = voiceChannels.first();
+        }
+      }
+    }
+
+    if (!voiceChannel) {
+      throw new Error("No voice channel available for event creation");
+    }
+
+    // Create VOICE channel event instead of EXTERNAL
     const event = await guild.scheduledEvents.create({
       name: "📚 Booq Club Meeting",
       scheduledStartTime: startTime,
       scheduledEndTime: endTime,
       privacyLevel: 2, // GUILD_ONLY
-      entityType: 3, // EXTERNAL
+      entityType: 2, // VOICE (instead of 3 for EXTERNAL)
       description: `${description}\n\nSet by Booq Club Bot (UK Time)`,
-      entityMetadata: {
-        location: "Voice Channel",
-      },
+      channel: voiceChannel.id, // Specify the voice channel
+      entityMetadata: null, // Not needed for VOICE events
     });
 
+    console.log(`✅ Event created in voice channel: ${voiceChannel.name} (${voiceChannel.id})`);
     return event;
   } catch (error) {
     console.error("Error creating event:", error);
@@ -559,13 +599,14 @@ client.on("messageCreate", async (message) => {
 
         let eventResponse = "";
         try {
-          if (message.guild) {
-            const event = await createBookClubEvent(
-              message.guild,
-              parsedDate,
-              `Booq Club Discussion - ${parsedDate.toLocaleString(DateTime.DATETIME_FULL)}`,
-            );
-
+          
+            if (message.guild) {
+              const event = await createBookClubEvent(
+                message.guild,
+                parsedDate,
+                `Booq Club Discussion - ${parsedDate.toLocaleString(DateTime.DATETIME_FULL)}`,
+                process.env.1339933313640435774 || null 
+              );
             meetingInfo.eventId = event.id;
             eventResponse = `\n📅 **Discord Event Created:** ${event.url}`;
           } else {
