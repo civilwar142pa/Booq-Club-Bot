@@ -324,7 +324,7 @@ async function createBookClubEvent(
   guild,
   dateTime,
   description = "Booq Club Meeting",
-  voiceChannelId = process.env.1339933313640435774 // Add this parameter
+  voiceChannelId = process.env.VOICE_CHANNEL_ID // Add this parameter
 ) {
   try {
     const startTime = dateTime.toJSDate();
@@ -605,7 +605,7 @@ client.on("messageCreate", async (message) => {
                 message.guild,
                 parsedDate,
                 `Booq Club Discussion - ${parsedDate.toLocaleString(DateTime.DATETIME_FULL)}`,
-                process.env.1339933313640435774 || null 
+                process.env.VOICE_CHANNEL_ID || null 
               );
             meetingInfo.eventId = event.id;
             eventResponse = `\n📅 **Discord Event Created:** ${event.url}`;
