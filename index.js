@@ -403,6 +403,24 @@ client.on("messageCreate", async (message) => {
     return;
   }
 
+  // Check for Category restriction
+  const categoryId = process.env.DISCORD_CATEGORY_ID;
+  if (categoryId && message.guild) {
+    // Check if this category ID actually exists in this specific server
+    const category = message.guild.channels.cache.get(categoryId);
+    
+    // If the category exists in this server, we enforce the restriction
+    if (category) {
+      if (message.channel.parentId !== categoryId) {
+        console.log(`🚫 [${currentCount}] Ignored command from channel ${message.channel.id} (Category: ${message.channel.parentId}) - Restricted to Category ${categoryId}`);
+        return;
+      }
+    } else {
+      // If the category ID doesn't exist in this server, we ignore the restriction (Global fallback)
+      console.log(`ℹ️ [${currentCount}] Category restriction ignored - Category ID ${categoryId} not found in this server`);
+    }
+  }
+
   // DETAILED DEBUG LOGGING
   console.log(`🔍 [${currentCount}] COMMAND START: "${message.content}"`);
   console.log(`   Author: ${message.author.tag} (${message.author.id})`);
