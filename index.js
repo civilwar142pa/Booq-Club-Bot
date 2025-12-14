@@ -1,35 +1,49 @@
 const { Client, GatewayIntentBits, ActivityType } = require("discord.js");
 const express = require("express");
 const { getSheetData } = require("./sheets");
-const fs = require("fs");
 const { DateTime } = require("luxon");
 const fetch = require("node-fetch");
+const mongoose = require("mongoose");
 
-// Load storage
-function loadStorage() {
-  try {
-    const data = fs.readFileSync("storage.json", "utf8");
-    return JSON.parse(data);
-  } catch (error) {
-    return {
-      readingPoint: null,
-      meetingInfo: {
-        date: null,
-        time: null,
-        eventId: null,
-        isoDate: null,
-      },
-    };
-  }
-}
+// Mongoose Schema for persistent storage
+const SettingsSchema = new mongoose.Schema({
+  _id: { type: String, default: "global_settings" }, // Single document for global settings
+  readingPoint: String,
+  meetingInfo: {
+    date: String,
+    time: String,
+    eventId: String,
+    isoDate: String,
+  },
+});
 
-function saveStorage(storage) {
-  fs.writeFileSync("storage.json", JSON.stringify(storage, null, 2));
-}
+const Settings = mongoose.model("Settings", SettingsSchema);
 
-let storage = loadStorage();
+// Initialize default state (will be overwritten by DB load)
+let storage = {
+  readingPoint: null,
+  meetingInfo: {
+    date: null,
+    time: null,
+    eventId: null,
+    isoDate: null,
+  },
+};
 let currentPoint = storage.readingPoint;
 let meetingInfo = storage.meetingInfo;
+
+async function saveStorage(newStorage) {
+  try {
+    // Save to MongoDB
+    await Settings.findByIdAndUpdate("global_settings", newStorage, {
+      upsert: true,
+      new: true,
+    });
+    console.log("💾 Data saved to MongoDB");
+  } catch (error) {
+    console.error("❌ Error saving to MongoDB:", error);
+  }
+}
 
 // UPTIMEROBOT HEARTBEAT MONITORING
 class UptimeRobotMonitor {
@@ -170,6 +184,28 @@ const DEFAULT_TIMEZONE = "Europe/London";
 
 // Enhanced bot initialization with auto-restart
 async function initializeBot() {
+  // 1. Connect to MongoDB
+  if (process.env.MONGODB_URI) {
+    try {
+      console.log("🍃 Connecting to MongoDB...");
+      await mongoose.connect(process.env.MONGODB_URI);
+      console.log("✅ Connected to MongoDB");
+
+      // 2. Load saved data
+      const savedSettings = await Settings.findById("global_settings");
+      if (savedSettings) {
+        storage = savedSettings.toObject();
+        currentPoint = storage.readingPoint;
+        meetingInfo = storage.meetingInfo || meetingInfo;
+        console.log("📥 Loaded data from database");
+      }
+    } catch (error) {
+      console.error("❌ MongoDB Connection Error:", error);
+    }
+  } else {
+    console.warn("⚠️ MONGODB_URI not set! Data will not persist on restart.");
+  }
+
   while (true) {
     try {
       console.log("🤖 Attempting to login to Discord...");
@@ -439,6 +475,7 @@ client.on("messageCreate", async (message) => {
         `**Booq Club Commands:**\n\n` +
           `\`!reading\` - Show what we're currently reading\n` +
           `\`!random\` - Pick a random book from future options\n` +
+          `\`!pastreads\` - List past books and their ratings\n` +
           `\`!nextmeeting\` - Show next meeting date, time, and event link\n` +
           `\`!currentpoint\` - Show where we're reading up to\n` +
           `\`!setpoint <description>\` - Set reading point\n` +
@@ -527,6 +564,54 @@ client.on("messageCreate", async (message) => {
         message.reply("Sorry, I could not pick a random book.");
       }
       console.log(`🏁 [${currentCount}] !random command completed`);
+      break;
+
+    case "pastreads":
+      console.log(`📚 [${currentCount}] Processing !pastreads command`);
+      try {
+        const data = await getSheetData();
+        // Skip header row
+        const books = data.slice(1);
+        
+        // Filter for books marked as 'read'
+        const pastBooks = books.filter(
+          (row) => row[2]?.toLowerCase() === "read"
+        );
+
+        if (pastBooks.length > 0) {
+          // Get the last 15 books to avoid hitting Discord's message length limit
+          const recentReads = pastBooks.slice(-15);
+          
+          const list = recentReads.map(book => {
+            const title = book[0] || "Unknown Title";
+            const author = book[1] || "Unknown Author";
+            const link = book[3];
+            // Rating is expected in the 5th column (index 4)
+            const rating = book[4];
+            
+            const ratingText = rating ? ` - ⭐ **${rating}**` : "";
+            const linkText = link ? `\n   Link: <${link}>` : "";
+            return `• **${title}** by ${author}${ratingText}${linkText}`;
+          }).join("\n");
+
+          const spreadsheetLink = "https://docs.google.com/spreadsheets/d/1TRraVAkBbpZHz0oLLe0TRkx9i8F4OwAUMkP4gm74nYs/edit"; //spreadsheet link
+          const folderLink = "https://drive.google.com/drive/u/0/folders/1YAyccVd4uYvrLheVSahAn8sXLwwov_Io"; // discussions folder link
+
+          console.log(`✅ [${currentCount}] Sending past reads response`);
+          message.reply(
+            `**Past Reads & Ratings** (Last ${recentReads.length}):\n\n${list}\n\n` +
+            `📊 **Spreadsheet:** <${spreadsheetLink}>\n` +
+            `📂 **Folder:** <${folderLink}>`
+          );
+        } else {
+          console.log(`❌ [${currentCount}] No past reads found`);
+          message.reply("No past reads found in the spreadsheet!");
+        }
+      } catch (error) {
+        console.error(`💥 [${currentCount}] Error in pastreads:`, error);
+        message.reply("Sorry, I could not fetch the past reads.");
+      }
+      console.log(`🏁 [${currentCount}] !pastreads command completed`);
       break;
 
     case "nextmeeting":
@@ -636,7 +721,7 @@ client.on("messageCreate", async (message) => {
         }
 
         storage.meetingInfo = meetingInfo;
-        saveStorage(storage);
+        await saveStorage(storage);
 
         console.log(`✅ [${currentCount}] Meeting set successfully`);
         message.reply(
@@ -681,7 +766,7 @@ client.on("messageCreate", async (message) => {
         };
         
         storage.meetingInfo = meetingInfo;
-        saveStorage(storage);
+        await saveStorage(storage);
         
         responseMessage += "✅ **Meeting data cleared!**\n";
         
@@ -732,7 +817,7 @@ client.on("messageCreate", async (message) => {
       const newPoint = args.join(" ");
       currentPoint = newPoint;
       storage.readingPoint = newPoint;
-      saveStorage(storage);
+      await saveStorage(storage);
 
       console.log(`✅ [${currentCount}] Reading point updated: ${newPoint}`);
       message.reply(
@@ -798,12 +883,17 @@ client.on("reconnecting", () => {
 });
 
 // Graceful shutdown
-process.on("SIGINT", () => {
-  console.log("🛑 Shutting down gracefully...");
+const gracefulShutdown = async (signal) => {
+  console.log(`🛑 ${signal} received. Shutting down gracefully...`);
+  
   uptimeMonitor.stopHeartbeats();
+  await mongoose.disconnect();
   client.destroy();
   process.exit(0);
-});
+};
+
+process.on("SIGINT", () => gracefulShutdown("SIGINT"));
+process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
 
 const token = process.env.DISCORD_BOT_TOKEN;
 

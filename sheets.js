@@ -65,11 +65,11 @@ async function getSheetData(range = 'Blad1') {
 function getSampleData() {
   // Realistic sample data that matches your spreadsheet structure
   return [
-    ['Title', 'Author', 'Status', 'Link'],
-    ['The Current Book', 'Current Author', 'currently reading', ''],
-    ['Future Book Option 1', 'Author One', 'future option', ''],
-    ['Future Book Option 2', 'Author Two', 'future option', ''],
-    ['Completed Book', 'Past Author', 'read', '']
+    ['Title', 'Author', 'Status', 'Link', 'Rating'],
+    ['The Current Book', 'Current Author', 'currently reading', '', ''],
+    ['Future Book Option 1', 'Author One', 'future option', '', ''],
+    ['Future Book Option 2', 'Author Two', 'future option', '', ''],
+    ['Completed Book', 'Past Author', 'read', '', '4.5']
   ];
 }
 
