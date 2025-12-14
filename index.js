@@ -573,9 +573,9 @@ client.on("messageCreate", async (message) => {
         // Skip header row
         const books = data.slice(1);
         
-        // Filter for books marked as 'read'
+        // Filter for books marked as 'finished'
         const pastBooks = books.filter(
-          (row) => row[2]?.toLowerCase() === "read"
+          (row) => row[2]?.toLowerCase() === "finished"
         );
 
         if (pastBooks.length > 0) {

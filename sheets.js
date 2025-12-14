@@ -69,7 +69,7 @@ function getSampleData() {
     ['The Current Book', 'Current Author', 'currently reading', '', ''],
     ['Future Book Option 1', 'Author One', 'future option', '', ''],
     ['Future Book Option 2', 'Author Two', 'future option', '', ''],
-    ['Completed Book', 'Past Author', 'read', '', '4.5']
+    ['Completed Book', 'Past Author', 'finished', '', '4.5']
   ];
 }
 
