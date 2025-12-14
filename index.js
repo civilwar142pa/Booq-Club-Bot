@@ -527,7 +527,7 @@ client.on("messageCreate", async (message) => {
             .setTitle('📖 Currently Reading')
             .setDescription(`**${current[0]}**\n*by ${current[1]}*`);
           
-          if (current[3]) readingEmbed.addFields({ name: '🔗 Link', value: current[3] });
+          if (current[3]) readingEmbed.addFields({ name: '🔗 Link', value: `[View Book](${current[3]})` });
           
           message.reply({ embeds: [readingEmbed] });
         } else {
@@ -558,7 +558,7 @@ client.on("messageCreate", async (message) => {
             .setTitle('🎲 Random Pick')
             .setDescription(`**${picked[0]}**\n*by ${picked[1]}*`);
 
-          if (picked[3]) randomEmbed.addFields({ name: '🔗 Link', value: picked[3] });
+          if (picked[3]) randomEmbed.addFields({ name: '🔗 Link', value: `[View Book](${picked[3]})` });
 
           message.reply({ embeds: [randomEmbed] });
         } else {
