@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, ActivityType } = require("discord.js");
+const { Client, GatewayIntentBits, ActivityType, EmbedBuilder } = require("discord.js");
 const express = require("express");
 const { getSheetData } = require("./sheets");
 const { DateTime } = require("luxon");
@@ -471,21 +471,17 @@ client.on("messageCreate", async (message) => {
   switch (command) {
     case "commands":
       console.log(`📋 [${currentCount}] Processing !commands`);
-      message.reply(
-        `**Booq Club Commands:**\n\n` +
-          `\`!reading\` - Show what we're currently reading\n` +
-          `\`!random\` - Pick a random book from future options\n` +
-          `\`!pastreads\` - List past books and their ratings\n` +
-          `\`!nextmeeting\` - Show next meeting date, time, and event link\n` +
-          `\`!currentpoint\` - Show where we're reading up to\n` +
-          `\`!setpoint <description>\` - Set reading point\n` +
-          `\`!setmeeting <date> <time>\` - Set next meeting & create event (UK time)\n` +
-          `\`!clearevent\` - Clear the current meeting and delete Discord event\n` +
-          `\`!link\` - Get the link to the spreadsheet\n` +
-          `\`!timehelp\` - Show date/time format help\n` +
-          `\`!status\` - Check bot status and uptime\n` +
-          `\`!commands\` - Show this list`,
-      );
+      const helpEmbed = new EmbedBuilder()
+        .setColor(0x0099FF)
+        .setTitle('🤖 Booq Club Commands')
+        .addFields(
+          { name: '📚 Reading', value: '`!reading` - Current book\n`!currentpoint` - Reading goal\n`!pastreads` - Past books list\n`!random` - Pick random future option' },
+          { name: '📅 Meetings', value: '`!nextmeeting` - Meeting info\n`!setmeeting` - Schedule meeting\n`!clearevent` - Cancel meeting' },
+          { name: '⚙️ Utility', value: '`!setpoint` - Set reading goal\n`!link` - Spreadsheet link\n`!timehelp` - Date format help\n`!status` - Bot health' }
+        )
+        .setFooter({ text: 'Booq Club Bot' });
+      
+      message.reply({ embeds: [helpEmbed] });
       console.log(`🏁 [${currentCount}] !commands completed`);
       break;
 
@@ -501,14 +497,18 @@ client.on("messageCreate", async (message) => {
         1024
       ).toFixed(2);
 
-      message.reply(
-        `**Bot Status:**\n` +
-          `✅ **Online**: ${hours}h ${minutes}m ${seconds}s\n` +
-          `📊 **Servers**: ${client.guilds.cache.size}\n` +
-          `💾 **Memory**: ${memoryUsage} MB\n` +
-          `🕒 **Last Update**: ${new Date().toLocaleTimeString()}\n` +
-          `📖 **Reading Point**: ${currentPoint || "Not set"}`,
-      );
+      const statusEmbed = new EmbedBuilder()
+        .setColor(0x00FF00)
+        .setTitle('📊 Bot Status')
+        .addFields(
+          { name: '✅ Online Time', value: `${hours}h ${minutes}m ${seconds}s`, inline: true },
+          { name: '📊 Servers', value: `${client.guilds.cache.size}`, inline: true },
+          { name: '💾 Memory', value: `${memoryUsage} MB`, inline: true },
+          { name: '📖 Reading Point', value: currentPoint || "Not set" }
+        )
+        .setTimestamp();
+
+      message.reply({ embeds: [statusEmbed] });
       console.log(`🏁 [${currentCount}] !status completed`);
       break;
 
@@ -522,11 +522,14 @@ client.on("messageCreate", async (message) => {
         );
         if (current) {
           console.log(`✅ [${currentCount}] Sending reading response`);
-          message.reply(
-            `**Currently Reading:**\n` +
-              `**${current[0]}** by ${current[1]}\n` +
-              `${current[3] ? `Link: ${current[3]}` : ""}`,
-          );
+          const readingEmbed = new EmbedBuilder()
+            .setColor(0x0099FF)
+            .setTitle('📖 Currently Reading')
+            .setDescription(`**${current[0]}**\n*by ${current[1]}*`);
+          
+          if (current[3]) readingEmbed.addFields({ name: '🔗 Link', value: current[3] });
+          
+          message.reply({ embeds: [readingEmbed] });
         } else {
           console.log(`❌ [${currentCount}] No current book found`);
           message.reply("No book is currently being read!");
@@ -550,11 +553,14 @@ client.on("messageCreate", async (message) => {
           const randomIndex = Math.floor(Math.random() * topChoices.length);
           const picked = topChoices[randomIndex];
           console.log(`✅ [${currentCount}] Sending random book response`);
-          message.reply(
-            `**Random Pick:**\n` +
-              `**${picked[0]}** by ${picked[1]}\n` +
-              `${picked[3] ? `Link: ${picked[3]}` : ""}`,
-          );
+          const randomEmbed = new EmbedBuilder()
+            .setColor(0x9B59B6) // Purple for random
+            .setTitle('🎲 Random Pick')
+            .setDescription(`**${picked[0]}**\n*by ${picked[1]}*`);
+
+          if (picked[3]) randomEmbed.addFields({ name: '🔗 Link', value: picked[3] });
+
+          message.reply({ embeds: [randomEmbed] });
         } else {
           console.log(`❌ [${currentCount}] No top choices found`);
           message.reply("No top choice options available!");
@@ -573,36 +579,49 @@ client.on("messageCreate", async (message) => {
         // Skip header row
         const books = data.slice(1);
         
-        // Filter for books marked as 'finished'
-        const pastBooks = books.filter(
-          (row) => row[2]?.toLowerCase() === "finished"
-        );
+        // Filter for books marked as 'finished' or 'read' (handles both keywords)
+        const pastBooks = books.filter((row) => {
+          const status = row[2]?.toLowerCase().trim();
+          return status === "finished" || status === "read";
+        });
 
         if (pastBooks.length > 0) {
           // Get the last 15 books to avoid hitting Discord's message length limit
-          const recentReads = pastBooks.slice(-15);
+          const recentReads = pastBooks.slice(-10); // Limit to 10 for a cleaner embed look
           
-          const list = recentReads.map(book => {
+          const embed = new EmbedBuilder()
+            .setColor(0x0099FF) // Blue color
+            .setTitle('📚 Past Reads & Ratings')
+            .setDescription("Here are the books we've finished recently:")
+            .setFooter({ text: 'Booq Club Archive' })
+            .setTimestamp();
+
+          const list = recentReads.map((book, index) => {
             const title = book[0] || "Unknown Title";
             const author = book[1] || "Unknown Author";
             const link = book[3];
             // Rating is expected in the 5th column (index 4)
             const rating = book[4];
             
-            const ratingText = rating ? ` - ⭐ **${rating}**` : "";
-            const linkText = link ? `\n   Link: <${link}>` : "";
-            return `• **${title}** by ${author}${ratingText}${linkText}`;
-          }).join("\n");
+            let entry = `**${index + 1}. ${title}**\n*by ${author}*`;
+            if (rating) entry += ` • ⭐ **${rating}/5**`;
+            if (link) entry += ` • View Book`;
+            
+            return entry;
+          }).join("\n\n");
+
+          embed.addFields({ name: 'Recent Books', value: list });
 
           const spreadsheetLink = "https://docs.google.com/spreadsheets/d/1TRraVAkBbpZHz0oLLe0TRkx9i8F4OwAUMkP4gm74nYs/edit"; //spreadsheet link
           const folderLink = "https://drive.google.com/drive/u/0/folders/1YAyccVd4uYvrLheVSahAn8sXLwwov_Io"; // discussions folder link
 
+          embed.addFields({ 
+            name: '📂 Resources', 
+            value: `📊 View Spreadsheet\n📂 Drive Folder` 
+          });
+
           console.log(`✅ [${currentCount}] Sending past reads response`);
-          message.reply(
-            `**Past Reads & Ratings** (Last ${recentReads.length}):\n\n${list}\n\n` +
-            `📊 **Spreadsheet:** <${spreadsheetLink}>\n` +
-            `📂 **Folder:** <${folderLink}>`
-          );
+          message.reply({ embeds: [embed] });
         } else {
           console.log(`❌ [${currentCount}] No past reads found`);
           message.reply("No past reads found in the spreadsheet!");
@@ -618,27 +637,33 @@ client.on("messageCreate", async (message) => {
       console.log(`📅 [${currentCount}] Processing !nextmeeting`);
       if (meetingInfo.isoDate) {
         const formattedDate = formatMeetingDate(meetingInfo.isoDate);
-        let response = `**Next Meeting:**\n${formattedDate}`;
-
+        
+        const meetingEmbed = new EmbedBuilder()
+          .setColor(0xF1C40F) // Gold/Yellow
+          .setTitle('📅 Next Meeting')
+          .setDescription(`**${formattedDate}**`);
+        
         if (meetingInfo.eventId) {
           try {
             const guild = message.guild;
             const event = await guild.scheduledEvents.fetch(
               meetingInfo.eventId,
             );
-            response += `\n📅 **Discord Event:** ${event.url}`;
+            meetingEmbed.addFields({ name: '🔗 Discord Event', value: event.url });
           } catch (error) {
-            response += `\n⚠️ *Event link unavailable*`;
+            // Event link unavailable, just skip adding the field
           }
         }
 
         console.log(`✅ [${currentCount}] Sending meeting info`);
-        message.reply(response);
+        message.reply({ embeds: [meetingEmbed] });
       } else if (meetingInfo.date) {
         console.log(`✅ [${currentCount}] Sending fallback meeting info`);
-        message.reply(
-          `**Next Meeting:**\n${meetingInfo.date}${meetingInfo.time ? ` at ${meetingInfo.time}` : ""} (UK time)`,
-        );
+        const fallbackEmbed = new EmbedBuilder()
+          .setColor(0xF1C40F)
+          .setTitle('📅 Next Meeting')
+          .setDescription(`${meetingInfo.date}${meetingInfo.time ? ` at ${meetingInfo.time}` : ""} (UK time)`);
+        message.reply({ embeds: [fallbackEmbed] });
       } else {
         console.log(`❌ [${currentCount}] No meeting scheduled`);
         message.reply(
@@ -652,15 +677,15 @@ client.on("messageCreate", async (message) => {
       console.log(`📅 [${currentCount}] Processing !setmeeting`);
       if (args.length === 0) {
         console.log(`ℹ️ [${currentCount}] Showing setmeeting help`);
-        message.reply(
-          "**Usage:** `!setmeeting <date> [time]`\n\n" +
-            "**Examples (UK Time):**\n" +
-            "`!setmeeting December 15 7pm`\n" +
-            '`!setmeeting "15 December" "19:30"`\n' +
-            "`!setmeeting next friday`\n" +
-            "`!setmeeting 2024-12-15 19:00`\n\n" +
-            "*If no time is specified, defaults to 7:00 PM UK time*",
-        );
+        const setMeetingHelpEmbed = new EmbedBuilder()
+          .setColor(0x0099FF)
+          .setTitle('📅 How to Set a Meeting')
+          .setDescription('**Usage:** `!setmeeting <date> [time]`')
+          .addFields(
+              { name: 'Examples (UK Time)', value: '`!setmeeting December 15 7pm`\n`!setmeeting next friday`\n`!setmeeting 2024-12-15 19:00`' },
+              { name: 'Note', value: 'If no time is specified, defaults to 7:00 PM UK time' }
+          );
+        return message.reply({ embeds: [setMeetingHelpEmbed] });
         return;
       }
 
@@ -700,7 +725,7 @@ client.on("messageCreate", async (message) => {
         meetingInfo.time = parsedDate.toLocaleString(DateTime.TIME_SIMPLE);
         meetingInfo.isoDate = parsedDate.toISO();
 
-        let eventResponse = "";
+        let eventUrl = null;
         try {
           
             if (message.guild) {
@@ -711,24 +736,27 @@ client.on("messageCreate", async (message) => {
                 process.env.VOICE_CHANNEL_ID || null 
               );
             meetingInfo.eventId = event.id;
-            eventResponse = `\n📅 **Discord Event Created:** ${event.url}`;
-          } else {
-            eventResponse = `\n⚠️ *Could not create event (not in a server)*`;
+            eventUrl = event.url;
           }
         } catch (error) {
           console.error(`⚠️ [${currentCount}] Failed to create event:`, error);
-          eventResponse = `\n⚠️ *Could not create Discord event (missing permissions)*`;
         }
 
         storage.meetingInfo = meetingInfo;
         await saveStorage(storage);
 
         console.log(`✅ [${currentCount}] Meeting set successfully`);
-        message.reply(
-          `✅ **Meeting set!**\n` +
-            `**When:** ${formatMeetingDate(meetingInfo.isoDate)}` +
-            eventResponse,
-        );
+        
+        const successEmbed = new EmbedBuilder()
+            .setColor(0x00FF00)
+            .setTitle('✅ Meeting Set!')
+            .addFields({ name: 'When', value: formatMeetingDate(meetingInfo.isoDate) });
+        
+        if (eventUrl) {
+            successEmbed.addFields({ name: '📅 Discord Event', value: eventUrl });
+        }
+
+        message.reply({ embeds: [successEmbed] });
       } catch (error) {
         console.error(`💥 [${currentCount}] Error setting meeting:`, error);
         message.reply("❌ Sorry, there was an error setting the meeting.");
@@ -775,7 +803,13 @@ client.on("messageCreate", async (message) => {
         }
         
         console.log(`✅ [${currentCount}] Meeting data cleared`);
-        message.reply(responseMessage);
+        
+        const clearEmbed = new EmbedBuilder()
+            .setColor(0xE74C3C) // Red/Orange
+            .setTitle('🗑️ Meeting Cleared')
+            .setDescription(responseMessage);
+        
+        message.reply({ embeds: [clearEmbed] });
         
       } catch (error) {
         console.error(`💥 [${currentCount}] Error clearing event:`, error);
@@ -788,7 +822,11 @@ client.on("messageCreate", async (message) => {
       console.log(`📖 [${currentCount}] Processing !currentpoint`);
       if (currentPoint) {
         console.log(`✅ [${currentCount}] Sending current point`);
-        message.reply(`**Reading up to:** ${currentPoint}`);
+        const pointEmbed = new EmbedBuilder()
+            .setColor(0x0099FF)
+            .setTitle('📖 Current Reading Point')
+            .setDescription(`**${currentPoint}**`);
+        message.reply({ embeds: [pointEmbed] });
       } else {
         console.log(`❌ [${currentCount}] No reading point set`);
         message.reply(
@@ -802,15 +840,12 @@ client.on("messageCreate", async (message) => {
       console.log(`📝 [${currentCount}] Processing !setpoint`);
       if (args.length === 0) {
         console.log(`ℹ️ [${currentCount}] Showing setpoint help`);
-        message.reply(
-          "**Usage:** `!setpoint <description>`\n\n" +
-            "**Examples:**\n" +
-            "`!setpoint Through Chapter 8`\n" +
-            "`!setpoint Until you hit Part 2`\n" +
-            "`!setpoint Page 150`\n" +
-            "`!setpoint The end of Section 3`\n" +
-            "`!setpoint Stop before the epilogue`",
-        );
+        const setPointHelpEmbed = new EmbedBuilder()
+            .setColor(0x0099FF)
+            .setTitle('📝 How to Set Reading Point')
+            .setDescription('**Usage:** `!setpoint <description>`')
+            .addFields({ name: 'Examples', value: '`!setpoint Through Chapter 8`\n`!setpoint Page 150`' });
+        return message.reply({ embeds: [setPointHelpEmbed] });
         return;
       }
 
@@ -820,39 +855,37 @@ client.on("messageCreate", async (message) => {
       await saveStorage(storage);
 
       console.log(`✅ [${currentCount}] Reading point updated: ${newPoint}`);
-      message.reply(
-        `✅ **Reading point updated!**\n**Read until:** ${currentPoint}`,
-      );
+      const setPointEmbed = new EmbedBuilder()
+            .setColor(0x00FF00)
+            .setTitle('✅ Reading Point Updated')
+            .setDescription(`**Read until:** ${currentPoint}`);
+      message.reply({ embeds: [setPointEmbed] });
       console.log(`🏁 [${currentCount}] !setpoint completed`);
       break;
 
     case "link":
       console.log(`🔗 [${currentCount}] Processing !link`);
-      message.reply(
-        `**Booq Club Spreadsheet:**\nhttps://docs.google.com/spreadsheets/d/1TRraVAkBbpZHz0oLLe0TRkx9i8F4OwAUMkP4gm74nYs/edit`,
-      );
+      const linkEmbed = new EmbedBuilder()
+            .setColor(0x0099FF)
+            .setTitle('🔗 Booq Club Spreadsheet')
+            .setDescription('Click the link below to view the book list.')
+            .addFields({ name: 'Link', value: 'https://docs.google.com/spreadsheets/d/1TRraVAkBbpZHz0oLLe0TRkx9i8F4OwAUMkP4gm74nYs/edit' });
+      message.reply({ embeds: [linkEmbed] });
       console.log(`🏁 [${currentCount}] !link completed`);
       break;
 
     case "timehelp":
       console.log(`⏰ [${currentCount}] Processing !timehelp`);
-      message.reply(
-        "**Date/Time Formats I Understand (UK Time):**\n\n" +
-          "**Dates:**\n" +
-          "• `December 15` or `15 December` (UK format)\n" +
-          "• `Dec 15` or `15 Dec`\n" +
-          "• `December 15, 2024`\n" +
-          "• `2024-12-15`\n" +
-          "• `next friday` or `this saturday`\n\n" +
-          "**Times:**\n" +
-          "• `7pm` or `7:30pm`\n" +
-          "• `19:00` (24-hour format)\n\n" +
-          "**Examples:**\n" +
-          "• `!setmeeting december 15 7pm`\n" +
-          '• `!setmeeting "15 december" "19:30"`\n' +
-          "• `!setmeeting 2024-12-15 19:00`\n\n" +
-          "*All times are UK time*",
-      );
+      const timeHelpEmbed = new EmbedBuilder()
+            .setColor(0x0099FF)
+            .setTitle('⏰ Date & Time Formats')
+            .setDescription('All times are in **UK Time**.')
+            .addFields(
+                { name: 'Dates', value: '• `December 15`\n• `15 Dec`\n• `2024-12-15`\n• `next friday`' },
+                { name: 'Times', value: '• `7pm`\n• `19:00`' },
+                { name: 'Examples', value: '• `!setmeeting december 15 7pm`\n• `!setmeeting "15 december" "19:30"`' }
+            );
+      message.reply({ embeds: [timeHelpEmbed] });
       console.log(`🏁 [${currentCount}] !timehelp completed`);
       break;
 
