@@ -5,6 +5,9 @@ const { DateTime } = require("luxon");
 const fetch = require("node-fetch");
 const mongoose = require("mongoose");
 
+// Generate a unique Session ID to identify this specific process
+const SESSION_ID = Math.floor(Math.random() * 100000).toString(16).toUpperCase();
+
 // Mongoose Schema for persistent storage
 const SettingsSchema = new mongoose.Schema({
   _id: { type: String, default: "global_settings" }, // Single document for global settings
@@ -223,6 +226,7 @@ async function initializeBot() {
 client.once("ready", () => {
   console.log(`✅ Logged in as ${client.user.tag}!`);
   console.log(`📊 Bot is in ${client.guilds.cache.size} server(s)`);
+  console.log(`🆔 Session ID: ${SESSION_ID}`);
   console.log(`📖 Loaded reading point: ${currentPoint}`);
   console.log(`📅 Loaded meeting info:`, meetingInfo);
 
@@ -501,6 +505,7 @@ client.on("messageCreate", async (message) => {
         .setColor(0x00FF00)
         .setTitle('📊 Bot Status')
         .addFields(
+          { name: '🆔 Instance ID', value: `\`${SESSION_ID}\``, inline: true },
           { name: '✅ Online Time', value: `${hours}h ${minutes}m ${seconds}s`, inline: true },
           { name: '📊 Servers', value: `${client.guilds.cache.size}`, inline: true },
           { name: '💾 Memory', value: `${memoryUsage} MB`, inline: true },
