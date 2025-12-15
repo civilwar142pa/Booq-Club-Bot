@@ -166,8 +166,17 @@ app.get("/monitor", (req, res) => {
 
 
 // Start the server
-app.listen(process.env.PORT || port, '0.0.0.0', () => {
+const server = app.listen(process.env.PORT || port, '0.0.0.0', () => {
   console.log(`Server running on port ${process.env.PORT || port}`);
+});
+
+server.on('error', (error) => {
+  if (error.code === 'EADDRINUSE') {
+    console.error(`❌ FATAL ERROR: Port ${process.env.PORT || port} is already in use.`);
+    console.error('   This usually means another instance of the bot is already running.');
+    console.error('   Please close the other instance before starting this one.');
+    process.exit(1);
+  }
 });
 
 // ROBUST BOT WITH SELF-KEEP-ALIVE
