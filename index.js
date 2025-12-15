@@ -368,7 +368,6 @@ function formatMeetingDate(isoDate) {
 }
 
 // Function to create Discord event
-// Function to create Discord event
 async function createBookClubEvent(
   guild,
   dateTime,
@@ -515,10 +514,9 @@ client.on("messageCreate", async (message) => {
         .setTitle('📊 Bot Status')
         .addFields(
           { name: '🆔 Instance ID', value: `\`${SESSION_ID}\``, inline: true },
-          { name: '✅ Online Time', value: `${hours}h ${minutes}m ${seconds}s`, inline: true },
+          { name: '✅ Online Time\n', value: `${hours}h ${minutes}m ${seconds}s`, inline: true },
           { name: '📊 Servers', value: `${client.guilds.cache.size}`, inline: true },
-          { name: '💾 Memory', value: `${memoryUsage} MB`, inline: true },
-          { name: '📖 Reading Point', value: currentPoint || "Not set" }
+          { name: '💾 Memory', value: `${memoryUsage} MB`, inline: true }
         )
         .setTimestamp();
 
