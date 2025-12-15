@@ -605,7 +605,7 @@ client.on("messageCreate", async (message) => {
             
             let entry = `**${index + 1}. ${title}**\n*by ${author}*`;
             if (rating) entry += ` • ⭐ **${rating}/5**`;
-            if (link) entry += ` • View Book`;
+            if (link) entry += ` •[ View Book](${link})`;
             
             return entry;
           }).join("\n\n");
