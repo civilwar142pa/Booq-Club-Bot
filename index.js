@@ -489,7 +489,7 @@ client.on("messageCreate", async (message) => {
         .addFields(
           { name: '📚 Reading', value: '`!reading` - Current book\n`!currentpoint` - Reading goal\n`!pastreads` - Past books list\n`!random` - Pick random future option' },
           { name: '📅 Meetings', value: '`!nextmeeting` - Meeting info\n`!setmeeting` - Schedule meeting\n`!clearevent` - Cancel meeting' },
-          { name: '⚙️ Utility', value: '`!setpoint` - Set reading goal\n`!link` - Spreadsheet link\n`!timehelp` - Date format help\n`!status` - Bot health' }
+          { name: '⚙️ Utility', value: '`!setpoint` - Set reading goal\n`!clearpoint` - Clear reading goal\n`!link` - Spreadsheet link\n`!timehelp` - Date format help\n`!status` - Bot health' }
         )
         .setFooter({ text: 'Booq Club Bot' });
       
@@ -876,6 +876,23 @@ client.on("messageCreate", async (message) => {
             .setDescription(`**Read until:** ${currentPoint}`);
       message.reply({ embeds: [setPointEmbed] });
       console.log(`🏁 [${currentCount}] !setpoint completed`);
+      break;
+
+    case "clearpoint":
+      console.log(`🗑️ [${currentCount}] Processing !clearpoint`);
+      
+      const previousPoint = currentPoint;
+      currentPoint = null;
+      storage.readingPoint = null;
+      await saveStorage(storage);
+
+      console.log(`✅ [${currentCount}] Reading point cleared`);
+      const clearPointEmbed = new EmbedBuilder()
+            .setColor(0xE74C3C)
+            .setTitle('🗑️ Reading Point Cleared')
+            .setDescription(previousPoint ? `**Cleared:** ${previousPoint}` : "Reading point has been removed.");
+      message.reply({ embeds: [clearPointEmbed] });
+      console.log(`🏁 [${currentCount}] !clearpoint completed`);
       break;
 
     case "link":
