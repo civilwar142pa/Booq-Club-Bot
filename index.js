@@ -629,7 +629,7 @@ client.on("messageCreate", async (message) => {
 
           embed.addFields({ 
             name: '📂 Resources', 
-            value: `📊 [Spreadsheet](${spreadsheetlink})\n📓 [Book Notes](${folderlink})` 
+            value: `📊 [Spreadsheet](${spreadsheetLink})\n📓 [Book Notes](${folderLink})`
           });
 
           console.log(`✅ [${currentCount}] Sending past reads response`);
