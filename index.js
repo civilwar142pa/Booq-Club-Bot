@@ -509,6 +509,8 @@ client.on("messageCreate", async (message) => {
         1024
       ).toFixed(2);
 
+      const dbStatus = mongoose.connection.readyState === 1 ? "✅ Connected" : "❌ Disconnected";
+
       const statusEmbed = new EmbedBuilder()
         .setColor(0x00FF00)
         .setTitle('📊 Bot Status')
@@ -516,7 +518,8 @@ client.on("messageCreate", async (message) => {
           { name: '🆔 Instance ID', value: `\`${SESSION_ID}\``, inline: true },
           { name: '✅ Online Time\n', value: `${hours}h ${minutes}m ${seconds}s`, inline: true },
           { name: '📊 Servers', value: `${client.guilds.cache.size}`, inline: true },
-          { name: '💾 Memory', value: `${memoryUsage} MB`, inline: true }
+          { name: '💾 Memory', value: `${memoryUsage} MB`, inline: true },
+          { name: '🍃 Database', value: dbStatus, inline: true }
         )
         .setTimestamp();
 
