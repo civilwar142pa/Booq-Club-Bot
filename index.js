@@ -609,13 +609,13 @@ client.on("messageCreate", async (message) => {
             .setTimestamp();
 
           const list = recentReads.map((book, index) => {
-            const title = book[0] || "Unknown Title";
-            const author = book[1] || "Unknown Author";
+            const title = String(book[0] || "Unknown Title").trim();
+            const author = String(book[1] || "Unknown Author").trim();
             const link = book[3];
             // Rating is expected in the 5th column (index 4)
             const rating = book[4];
             
-            let entry = `**${index + 1}. ${title}**\n*by ${author}*`;
+            let entry = `**${index + 1}. ${title}** • *by ${author}*`;
             if (rating) entry += ` • ⭐ **${rating}/5**`;
             if (link) entry += ` •[ View Book](${link})`;
             
