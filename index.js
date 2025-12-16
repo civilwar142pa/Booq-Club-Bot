@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, ActivityType, EmbedBuilder } = require("discord.js");
+const { Client, GatewayIntentBits, ActivityType, EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder } = require("discord.js");
 const express = require("express");
 const { getSheetData } = require("./sheets");
 const { DateTime } = require("luxon");
@@ -21,6 +21,31 @@ const SettingsSchema = new mongoose.Schema({
 });
 
 const Settings = mongoose.model("Settings", SettingsSchema);
+
+// Poll Schema for persistent voting
+const PollSchema = new mongoose.Schema({
+  messageId: String,
+  channelId: String,
+  title: String,
+  expiresAt: Date,
+  votes: { type: Map, of: Number, default: {} },
+  isActive: { type: Boolean, default: true }
+});
+
+const Poll = mongoose.model("Poll", PollSchema);
+
+const POLL_OPTIONS = [
+  { label: "0", value: "0" },
+  { label: "1⭐️", value: "1" },
+  { label: "1.5⭐️💫", value: "1.5" },
+  { label: "2⭐️⭐️", value: "2" },
+  { label: "2.5⭐️⭐️💫", value: "2.5" },
+  { label: "3⭐️⭐️⭐️", value: "3" },
+  { label: "3.5⭐️⭐️⭐️💫", value: "3.5" },
+  { label: "4⭐️⭐️⭐️⭐️", value: "4" },
+  { label: "4.5⭐️⭐️⭐️⭐️💫", value: "4.5" },
+  { label: "5⭐️⭐️⭐️⭐️⭐️", value: "5" }
+];
 
 // Initialize default state (will be overwritten by DB load)
 let storage = {
@@ -239,6 +264,32 @@ client.once("ready", () => {
   console.log(`📖 Loaded reading point: ${currentPoint}`);
   console.log(`📅 Loaded meeting info:`, meetingInfo);
 
+  // Recover active polls
+  (async () => {
+    try {
+      const activePolls = await Poll.find({ isActive: true });
+      if (activePolls.length > 0) {
+        console.log(`📊 Found ${activePolls.length} active polls to recover.`);
+        for (const poll of activePolls) {
+          try {
+            const channel = await client.channels.fetch(poll.channelId);
+            if (channel) {
+              const message = await channel.messages.fetch(poll.messageId);
+              if (message) {
+                monitorPoll(poll, message);
+                console.log(`   Recovered poll: ${poll.title}`);
+              }
+            }
+          } catch (err) {
+            console.error(`   Failed to recover poll ${poll.title}:`, err.message);
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Error loading active polls:", error);
+    }
+  })();
+
   // START UPTIMEROBOT HEARTBEATS
   uptimeMonitor.startHeartbeats(60000); // Every 60 seconds
 
@@ -433,6 +484,80 @@ async function createBookClubEvent(
     console.error("Error creating event:", error);
     throw error;
   }
+}
+
+// Poll Helper Functions
+async function finishPoll(poll, message) {
+  if (!poll.isActive) return;
+
+  let totalScore = 0;
+  let totalVotes = 0;
+  
+  if (poll.votes && poll.votes.size > 0) {
+    totalVotes = poll.votes.size;
+    for (const score of poll.votes.values()) {
+      totalScore += score;
+    }
+  }
+
+  const average = totalVotes > 0 ? (totalScore / totalVotes).toFixed(2) : "N/A";
+
+  const resultEmbed = new EmbedBuilder()
+    .setColor(0x00FF00)
+    .setTitle(`📊 Poll Results: ${poll.title}`)
+    .setDescription(`**Average Score:** ${average}/5\n**Total Votes:** ${totalVotes}`)
+    .setTimestamp();
+
+  try {
+    if (message) {
+      const disabledSelect = new StringSelectMenuBuilder()
+        .setCustomId('poll_select_ended')
+        .setPlaceholder('Poll Ended')
+        .setDisabled(true)
+        .addOptions(POLL_OPTIONS); // Reuse options for visual consistency
+
+      const disabledRow = new ActionRowBuilder().addComponents(disabledSelect);
+      
+      await message.edit({ components: [disabledRow] });
+      await message.reply({ embeds: [resultEmbed] });
+    }
+  } catch (error) {
+    console.error("Error finishing poll:", error);
+  }
+
+  poll.isActive = false;
+  await poll.save();
+}
+
+function monitorPoll(poll, message) {
+  const now = new Date();
+  const remainingTime = poll.expiresAt - now;
+
+  if (remainingTime <= 0) {
+    finishPoll(poll, message);
+    return;
+  }
+
+  const collector = message.createMessageComponentCollector({ time: remainingTime });
+
+  collector.on('collect', async i => {
+    const value = parseFloat(i.values[0]);
+    
+    // Update vote in DB
+    if (!poll.votes) poll.votes = new Map();
+    poll.votes.set(i.user.id, value);
+    poll.markModified('votes');
+    await poll.save();
+
+    const label = POLL_OPTIONS.find(o => o.value === i.values[0])?.label || value;
+    await i.reply({ content: `You voted: ${label}`, ephemeral: true });
+  });
+
+  collector.on('end', (collected, reason) => {
+    if (reason === 'time') {
+      finishPoll(poll, message);
+    }
+  });
 }
 
 // COMPLETE MESSAGE HANDLER WITH ALL COMMANDS
@@ -912,77 +1037,46 @@ client.on("messageCreate", async (message) => {
         const pollHelpEmbed = new EmbedBuilder()
           .setColor(0x0099FF)
           .setTitle('📊 How to use Poll')
-          .setDescription('**Usage:** `!poll <title>`\nCreates a rating poll that lasts for 3 days.')
+          .setDescription('**Usage:** `!poll <title>`\nCreates a rating poll that lasts for 12 hours.')
           .addFields({ name: 'Example', value: '`!poll Rate this week\'s book`' });
         message.reply({ embeds: [pollHelpEmbed] });
         return;
       }
 
       const pollTitle = args.join(" ");
-      const pollDuration = 3 * 24 * 60 * 60 * 1000; // 3 days
+      const pollDuration = 12 * 60 * 60 * 1000; // 12 hours
       
       const pollEmbed = new EmbedBuilder()
         .setColor(0x0099FF)
         .setTitle(`📊 ${pollTitle}`)
-        .setDescription(`React with the emojis below to vote!\n\n` +
-          `0️⃣ : 0\n` +
-          `1️⃣ : 1⭐️\n` +
-          `2️⃣ : 1.5⭐️💫\n` +
-          `3️⃣ : 2⭐️⭐️\n` +
-          `4️⃣ : 2.5⭐️⭐️💫\n` +
-          `5️⃣ : 3⭐️⭐️⭐️\n` +
-          `6️⃣ : 3.5⭐️⭐️⭐️💫\n` +
-          `7️⃣ : 4⭐️⭐️⭐️⭐️\n` +
-          `8️⃣ : 4.5⭐️⭐️⭐️⭐️💫\n` +
-          `9️⃣ : 5⭐️⭐️⭐️⭐️⭐️\n\n` +
-          `*Poll ends in 3 days.*`)
+        .setDescription(`Select your rating from the menu below!\n\n*Poll ends in 12 hours.*`)
         .setFooter({ text: 'Booq Club Poll' })
         .setTimestamp();
 
-      const pollMessage = await message.channel.send({ embeds: [pollEmbed] });
+      const selectMenu = new StringSelectMenuBuilder()
+        .setCustomId('poll_select')
+        .setPlaceholder('Select a rating...')
+        .addOptions(POLL_OPTIONS);
+
+      const row = new ActionRowBuilder()
+        .addComponents(selectMenu);
+
+      const pollMessage = await message.channel.send({ embeds: [pollEmbed], components: [row] });
       
-      const emojis = ['0️⃣', '1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣'];
-      const values = [0, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5];
-      
-      // React in order
-      try {
-        for (const emoji of emojis) {
-          await pollMessage.react(emoji);
-        }
-      } catch (error) {
-        console.error(`💥 [${currentCount}] Error reacting to poll:`, error);
-      }
-
-      const filter = (reaction, user) => emojis.includes(reaction.emoji.name) && !user.bot;
-
-      const collector = pollMessage.createReactionCollector({ filter, time: pollDuration });
-
-      collector.on('end', collected => {
-        let totalScore = 0;
-        let totalVotes = 0;
-
-        collected.forEach((reaction) => {
-          const emojiIndex = emojis.indexOf(reaction.emoji.name);
-          if (emojiIndex !== -1) {
-            const value = values[emojiIndex];
-            const count = reaction.count - 1; // Subtract bot's reaction
-            if (count > 0) {
-              totalScore += value * count;
-              totalVotes += count;
-            }
-          }
-        });
-
-        const average = totalVotes > 0 ? (totalScore / totalVotes).toFixed(2) : "N/A";
-
-        const resultEmbed = new EmbedBuilder()
-          .setColor(0x00FF00)
-          .setTitle(`📊 Poll Results: ${pollTitle}`)
-          .setDescription(`**Average Score:** ${average}/5\n**Total Votes:** ${totalVotes}`)
-          .setTimestamp();
-
-        pollMessage.reply({ embeds: [resultEmbed] }).catch(console.error);
+      // Save to DB
+      const newPoll = new Poll({
+        messageId: pollMessage.id,
+        channelId: message.channel.id,
+        title: pollTitle,
+        expiresAt: new Date(Date.now() + pollDuration),
+        votes: {},
+        isActive: true
       });
+      
+      await newPoll.save();
+
+      // Start monitoring
+      monitorPoll(newPoll, pollMessage);
 
       console.log(`✅ [${currentCount}] Poll started: ${pollTitle}`);
       break;
