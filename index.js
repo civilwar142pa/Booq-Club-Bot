@@ -489,7 +489,7 @@ client.on("messageCreate", async (message) => {
         .addFields(
           { name: '📚 Reading', value: '`!reading` - Current book\n`!currentpoint` - Reading goal\n`!pastreads` - Past books list\n`!random` - Pick random future option' },
           { name: '📅 Meetings', value: '`!nextmeeting` - Meeting info\n`!setmeeting` - Schedule meeting\n`!clearevent` - Cancel meeting' },
-          { name: '⚙️ Utility', value: '`!setpoint` - Set reading goal\n`!clearpoint` - Clear reading goal\n`!link` - Spreadsheet link\n`!timehelp` - Date format help\n`!status` - Bot health' }
+          { name: '⚙️ Utility', value: '`!poll` - Start a voting poll\n`!setpoint` - Set reading goal\n`!clearpoint` - Clear reading goal\n`!link` - Spreadsheet link\n`!timehelp` - Date format help\n`!status` - Bot health' }
         )
         .setFooter({ text: 'Booq Club Bot' });
       
@@ -904,6 +904,87 @@ client.on("messageCreate", async (message) => {
             .addFields({ name: 'Link', value: 'https://docs.google.com/spreadsheets/d/1TRraVAkBbpZHz0oLLe0TRkx9i8F4OwAUMkP4gm74nYs/edit' });
       message.reply({ embeds: [linkEmbed] });
       console.log(`🏁 [${currentCount}] !link completed`);
+      break;
+
+    case "poll":
+      console.log(`📊 [${currentCount}] Processing !poll`);
+      if (args.length === 0) {
+        const pollHelpEmbed = new EmbedBuilder()
+          .setColor(0x0099FF)
+          .setTitle('📊 How to use Poll')
+          .setDescription('**Usage:** `!poll <title>`\nCreates a rating poll that lasts for 3 days.')
+          .addFields({ name: 'Example', value: '`!poll Rate this week\'s book`' });
+        message.reply({ embeds: [pollHelpEmbed] });
+        return;
+      }
+
+      const pollTitle = args.join(" ");
+      const pollDuration = 3 * 24 * 60 * 60 * 1000; // 3 days
+      
+      const pollEmbed = new EmbedBuilder()
+        .setColor(0x0099FF)
+        .setTitle(`📊 ${pollTitle}`)
+        .setDescription(`React with the emojis below to vote!\n\n` +
+          `0️⃣ : 0\n` +
+          `1️⃣ : 1⭐️\n` +
+          `2️⃣ : 1.5⭐️💫\n` +
+          `3️⃣ : 2⭐️⭐️\n` +
+          `4️⃣ : 2.5⭐️⭐️💫\n` +
+          `5️⃣ : 3⭐️⭐️⭐️\n` +
+          `6️⃣ : 3.5⭐️⭐️⭐️💫\n` +
+          `7️⃣ : 4⭐️⭐️⭐️⭐️\n` +
+          `8️⃣ : 4.5⭐️⭐️⭐️⭐️💫\n` +
+          `9️⃣ : 5⭐️⭐️⭐️⭐️⭐️\n\n` +
+          `*Poll ends in 3 days.*`)
+        .setFooter({ text: 'Booq Club Poll' })
+        .setTimestamp();
+
+      const pollMessage = await message.channel.send({ embeds: [pollEmbed] });
+      
+      const emojis = ['0️⃣', '1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣'];
+      const values = [0, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5];
+      
+      // React in order
+      try {
+        for (const emoji of emojis) {
+          await pollMessage.react(emoji);
+        }
+      } catch (error) {
+        console.error(`💥 [${currentCount}] Error reacting to poll:`, error);
+      }
+
+      const filter = (reaction, user) => emojis.includes(reaction.emoji.name) && !user.bot;
+
+      const collector = pollMessage.createReactionCollector({ filter, time: pollDuration });
+
+      collector.on('end', collected => {
+        let totalScore = 0;
+        let totalVotes = 0;
+
+        collected.forEach((reaction) => {
+          const emojiIndex = emojis.indexOf(reaction.emoji.name);
+          if (emojiIndex !== -1) {
+            const value = values[emojiIndex];
+            const count = reaction.count - 1; // Subtract bot's reaction
+            if (count > 0) {
+              totalScore += value * count;
+              totalVotes += count;
+            }
+          }
+        });
+
+        const average = totalVotes > 0 ? (totalScore / totalVotes).toFixed(2) : "N/A";
+
+        const resultEmbed = new EmbedBuilder()
+          .setColor(0x00FF00)
+          .setTitle(`📊 Poll Results: ${pollTitle}`)
+          .setDescription(`**Average Score:** ${average}/5\n**Total Votes:** ${totalVotes}`)
+          .setTimestamp();
+
+        pollMessage.reply({ embeds: [resultEmbed] }).catch(console.error);
+      });
+
+      console.log(`✅ [${currentCount}] Poll started: ${pollTitle}`);
       break;
 
     case "timehelp":
