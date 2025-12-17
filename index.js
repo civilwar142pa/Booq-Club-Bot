@@ -488,7 +488,7 @@ async function createBookClubEvent(
 
 // Poll Helper Functions
 async function finishPoll(poll, message) {
-  if (!poll.isActive) return;
+  if (!poll.isActive) return null;
 
   let totalScore = 0;
   let totalVotes = 0;
@@ -527,6 +527,7 @@ async function finishPoll(poll, message) {
 
   poll.isActive = false;
   await poll.save();
+  return resultEmbed;
 }
 
 function monitorPoll(poll, message) {
@@ -1037,19 +1038,19 @@ client.on("messageCreate", async (message) => {
         const pollHelpEmbed = new EmbedBuilder()
           .setColor(0x0099FF)
           .setTitle('📊 How to use Poll')
-          .setDescription('**Usage:** `!poll <title>`\nCreates a rating poll that lasts for 12 hours.')
+          .setDescription('**Usage:** `!poll <title>`\nCreates a rating poll that lasts for 3 days.')
           .addFields({ name: 'Example', value: '`!poll Rate this week\'s book`' });
         message.reply({ embeds: [pollHelpEmbed] });
         return;
       }
 
       const pollTitle = args.join(" ");
-      const pollDuration = 12 * 60 * 60 * 1000; // 12 hours
+      const pollDuration = 3 * 24 * 60 * 60 * 1000; // 3 days
       
       const pollEmbed = new EmbedBuilder()
         .setColor(0x0099FF)
         .setTitle(`📊 ${pollTitle}`)
-        .setDescription(`Select your rating from the menu below!\n\n*Poll ends in 12 hours.*`)
+        .setDescription(`Select your rating from the menu below!\n\n*Poll ends in 3 days.*`)
         .setFooter({ text: 'Booq Club Poll' })
         .setTimestamp();
 
@@ -1079,6 +1080,40 @@ client.on("messageCreate", async (message) => {
       monitorPoll(newPoll, pollMessage);
 
       console.log(`✅ [${currentCount}] Poll started: ${pollTitle}`);
+      break;
+
+    case "endpoll":
+      console.log(`🛑 [${currentCount}] Processing !endpoll`);
+      try {
+        const activePoll = await Poll.findOne({ 
+          channelId: message.channel.id, 
+          isActive: true 
+        }).sort({ _id: -1 });
+
+        if (!activePoll) {
+          message.reply("No active poll found in this channel.");
+          return;
+        }
+
+        let pollMessage = null;
+        try {
+          pollMessage = await message.channel.messages.fetch(activePoll.messageId);
+        } catch (e) {
+          console.log("Original poll message not found");
+        }
+
+        const result = await finishPoll(activePoll, pollMessage);
+        
+        if (!pollMessage && result) {
+           message.reply({ content: "✅ Poll ended. (Original message not found)", embeds: [result] });
+        } else {
+           message.reply("✅ Poll ended.");
+        }
+      } catch (error) {
+        console.error(`💥 [${currentCount}] Error ending poll:`, error);
+        message.reply("❌ An error occurred while trying to end the poll.");
+      }
+      console.log(`🏁 [${currentCount}] !endpoll completed`);
       break;
 
     case "timehelp":
