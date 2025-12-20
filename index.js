@@ -4,6 +4,7 @@ const { getSheetData } = require("./sheets");
 const { DateTime } = require("luxon");
 const fetch = require("node-fetch");
 const mongoose = require("mongoose");
+const SpotifyWebApi = require("spotify-web-api-node");
 
 // Generate a unique Session ID to identify this specific process
 const SESSION_ID = Math.floor(Math.random() * 100000).toString(16).toUpperCase();
@@ -33,6 +34,13 @@ const PollSchema = new mongoose.Schema({
 });
 
 const Poll = mongoose.model("Poll", PollSchema);
+
+// Spotify Token Schema
+const SpotifyTokenSchema = new mongoose.Schema({
+  _id: { type: String, default: "main_token" },
+  data: Object // Stores access_token, refresh_token, expires_at, etc.
+});
+const SpotifyToken = mongoose.model("SpotifyToken", SpotifyTokenSchema);
 
 const POLL_OPTIONS = [
   { label: "0", value: "0" },
@@ -155,6 +163,129 @@ class UptimeRobotMonitor {
 // Initialize UptimeRobot monitor
 const uptimeMonitor = new UptimeRobotMonitor();
 
+// SPOTIFY SERVICE
+class SpotifyService {
+  constructor() {
+    this.isEnabled = !!(process.env.SPOTIFY_CLIENT_ID && process.env.SPOTIFY_CLIENT_SECRET);
+    if (!this.isEnabled) {
+      console.warn("⚠️ Spotify credentials missing. Spotify commands will be disabled.");
+      return;
+    }
+
+    this.api = new SpotifyWebApi({
+      clientId: process.env.SPOTIFY_CLIENT_ID,
+      clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
+      redirectUri: process.env.SPOTIFY_REDIRECT_URI || "http://localhost:3000/callback"
+    });
+    this.playlistId = process.env.SPOTIFY_PLAYLIST_ID;
+  }
+
+  async init() {
+    if (!this.isEnabled) return;
+    try {
+      const doc = await SpotifyToken.findById("main_token");
+      if (doc && doc.data) {
+        this.api.setAccessToken(doc.data.access_token);
+        this.api.setRefreshToken(doc.data.refresh_token);
+        console.log("🎵 Spotify tokens loaded from MongoDB");
+        await this.refreshIfNeeded(doc.data);
+      } else {
+        console.log("⚠️ No Spotify tokens found in DB. Run !spotifyauth");
+      }
+    } catch (error) {
+      console.error("❌ Spotify Init Error:", error);
+    }
+  }
+
+  async refreshIfNeeded(tokenData) {
+    const now = Math.floor(Date.now() / 1000);
+    // Refresh if expired or expiring in next 5 minutes
+    if (tokenData.expires_at && now > tokenData.expires_at - 300) {
+      console.log("🔄 Refreshing Spotify Access Token...");
+      try {
+        const data = await this.api.refreshAccessToken();
+        await this.saveTokens(data.body);
+      } catch (error) {
+        console.error("❌ Error refreshing Spotify token:", error);
+      }
+    }
+  }
+
+  async saveTokens(body) {
+    const current = (await SpotifyToken.findById("main_token"))?.data || {};
+    
+    // Merge new data with old (to keep refresh_token if not returned)
+    const newData = { ...current, ...body };
+    
+    // Calculate absolute expiration time
+    if (body.expires_in) {
+      newData.expires_at = Math.floor(Date.now() / 1000) + body.expires_in;
+    }
+
+    this.api.setAccessToken(newData.access_token);
+    if (newData.refresh_token) this.api.setRefreshToken(newData.refresh_token);
+
+    await SpotifyToken.findByIdAndUpdate("main_token", { data: newData }, { upsert: true });
+    console.log("💾 Spotify tokens saved");
+  }
+
+  getAuthUrl() {
+    const scopes = ['playlist-modify-public', 'playlist-modify-private'];
+    return this.api.createAuthorizeURL(scopes, 'state');
+  }
+
+  async searchAndAdd(query) {
+    await this.refreshIfNeeded((await SpotifyToken.findById("main_token"))?.data || {});
+    
+    const searchRes = await this.api.searchTracks(query, { limit: 1 });
+    if (!searchRes.body.tracks.items.length) return null;
+
+    const track = searchRes.body.tracks.items[0];
+    
+    // Check duplicates (simple check)
+    const playlistTracks = await this.api.getPlaylistTracks(this.playlistId);
+    const isDuplicate = playlistTracks.body.items.some(item => item.track.id === track.id);
+    
+    if (isDuplicate) {
+      return { track, status: "duplicate" };
+    }
+
+    await this.api.addTracksToPlaylist(this.playlistId, [track.uri]);
+    return { track, status: "added" };
+  }
+
+  async removeSong(query) {
+    await this.refreshIfNeeded((await SpotifyToken.findById("main_token"))?.data || {});
+    
+    // 1. Search for the track to get URI
+    const searchRes = await this.api.searchTracks(query, { limit: 1 });
+    if (!searchRes.body.tracks.items.length) return { status: "not_found" };
+    
+    const trackTarget = searchRes.body.tracks.items[0];
+
+    // 2. Scan playlist to see if it's there
+    const playlistTracks = await this.api.getPlaylistTracks(this.playlistId);
+    const match = playlistTracks.body.items.find(item => item.track.id === trackTarget.id);
+
+    if (!match) return { status: "not_in_playlist", track: trackTarget };
+
+    // 3. Remove
+    await this.api.removeTracksFromPlaylist(this.playlistId, [{ uri: trackTarget.uri }]);
+    return { status: "removed", track: trackTarget };
+  }
+
+  async getPlaylistLink() {
+    try {
+      const data = await this.api.getPlaylist(this.playlistId);
+      return data.body.external_urls.spotify;
+    } catch (e) {
+      return null;
+    }
+  }
+}
+
+const spotifyService = new SpotifyService();
+
 // SIMPLE EXPRESS SERVER FOR INTERNAL USE
 const app = express();
 const port = 3000;
@@ -189,6 +320,24 @@ app.get("/monitor", (req, res) => {
   res.send("BOOK_CLUB_BOT_ACTIVE");
 });
 
+// Spotify Callback Endpoint
+app.get("/callback", async (req, res) => {
+  const error = req.query.error;
+  const code = req.query.code;
+
+  if (error) {
+    return res.send(`Callback Error: ${error}`);
+  }
+
+  try {
+    const data = await spotifyService.api.authorizationCodeGrant(code);
+    await spotifyService.saveTokens(data.body);
+    res.send('✅ Spotify authentication successful! You can close this window.');
+  } catch (error) {
+    console.error('Error getting Tokens:', error);
+    res.send(`Error getting Tokens: ${error}`);
+  }
+});
 
 // Start the server
 const server = app.listen(process.env.PORT || port, '0.0.0.0', () => {
@@ -236,6 +385,9 @@ async function initializeBot() {
         meetingInfo = storage.meetingInfo || meetingInfo;
         console.log("📥 Loaded data from database");
       }
+
+      // 3. Initialize Spotify
+      await spotifyService.init();
     } catch (error) {
       console.error("❌ MongoDB Connection Error:", error);
     }
@@ -615,6 +767,7 @@ client.on("messageCreate", async (message) => {
         .addFields(
           { name: '📚 Reading', value: '`!reading` - Current book\n`!currentpoint` - Reading goal\n`!pastreads` - Past books list\n`!random` - Pick random future option' },
           { name: '📅 Meetings', value: '`!nextmeeting` - Meeting info\n`!setmeeting` - Schedule meeting\n`!clearevent` - Cancel meeting' },
+          { name: '🎵 Spotify', value: '`!addsong <name>` - Add to playlist\n`!deletesong <name>` - Remove from playlist\n`!spotifylink` - Get playlist link' },
           { name: '⚙️ Utility', value: '`!poll` - Start a voting poll\n`!setpoint` - Set reading goal\n`!clearpoint` - Clear reading goal\n`!link` - Spreadsheet link\n`!timehelp` - Date format help\n`!status` - Bot health' }
         )
         .setFooter({ text: 'Booq Club Bot' });
@@ -1030,6 +1183,76 @@ client.on("messageCreate", async (message) => {
             .addFields({ name: 'Link', value: 'https://docs.google.com/spreadsheets/d/1TRraVAkBbpZHz0oLLe0TRkx9i8F4OwAUMkP4gm74nYs/edit' });
       message.reply({ embeds: [linkEmbed] });
       console.log(`🏁 [${currentCount}] !link completed`);
+      break;
+
+    case "spotifyauth":
+      if (!spotifyService.isEnabled) return message.reply("Spotify is not configured.");
+      const authUrl = spotifyService.getAuthUrl();
+      const authEmbed = new EmbedBuilder()
+        .setColor(0x1DB954)
+        .setTitle('🔐 Spotify Authentication')
+        .setDescription(`Click here to authorize the bot`)
+        .setFooter({ text: 'Only required once or if tokens expire completely' });
+      message.reply({ embeds: [authEmbed] });
+      break;
+
+    case "spotifylink":
+      const sLink = await spotifyService.getPlaylistLink();
+      if (sLink) {
+        message.reply(`🎵 **Spotify Playlist:**\n${sLink}`);
+      } else {
+        message.reply("Could not retrieve playlist link.");
+      }
+      break;
+
+    case "addsong":
+      if (!args.length) return message.reply("Usage: `!addsong <song name>`");
+      const query = args.join(" ");
+      message.channel.sendTyping();
+      
+      try {
+        const result = await spotifyService.searchAndAdd(query);
+        if (!result) {
+          message.reply("❌ Could not find that song.");
+        } else if (result.status === "duplicate") {
+          message.reply(`⚠️ **${result.track.name}** by ${result.track.artists[0].name} is already in the playlist!`);
+        } else {
+          const addEmbed = new EmbedBuilder()
+            .setColor(0x1DB954)
+            .setTitle('✅ Song Added')
+            .setDescription(`**${result.track.name}**\n*by ${result.track.artists[0].name}*`)
+            .setThumbnail(result.track.album.images[0]?.url);
+          message.reply({ embeds: [addEmbed] });
+        }
+      } catch (err) {
+        console.error(err);
+        message.reply("❌ Error adding song. The bot might need re-authentication (`!spotifyauth`).");
+      }
+      break;
+
+    case "deletesong":
+      if (!args.length) return message.reply("Usage: `!deletesong <song name>`");
+      const delQuery = args.join(" ");
+      message.channel.sendTyping();
+
+      try {
+        const result = await spotifyService.removeSong(delQuery);
+        
+        if (result.status === "not_found") {
+          message.reply("❌ Could not find that song on Spotify to identify it.");
+        } else if (result.status === "not_in_playlist") {
+          message.reply(`⚠️ Found **${result.track.name}**, but it's not in the playlist.`);
+        } else {
+          const delEmbed = new EmbedBuilder()
+            .setColor(0xE74C3C)
+            .setTitle('🗑️ Song Removed')
+            .setDescription(`**${result.track.name}**\n*by ${result.track.artists[0].name}*`);
+          message.reply({ embeds: [delEmbed] });
+        }
+      } catch (err) {
+        console.error(err);
+        message.reply("❌ Error removing song.");
+      }
       break;
 
     case "poll":
