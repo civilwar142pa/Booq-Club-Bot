@@ -1038,7 +1038,6 @@ client.on("messageCreate", async (message) => {
           .setColor(0x0099FF)
           .setTitle('📊 How to use Poll')
           .setDescription('**Usage:** `!poll <title>`\nCreates a rating poll that lasts for 3 days.')
-          .setDescription('**Usage:** `!poll <title>`\nCreates a rating poll that lasts for 12 hours.')
           .addFields({ name: 'Example', value: '`!poll Rate this week\'s book`' });
         message.reply({ embeds: [pollHelpEmbed] });
         return;
