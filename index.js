@@ -1330,7 +1330,7 @@ client.on("messageCreate", async (message) => {
         if (!pollMessage && result) {
            message.reply({ content: "✅ Poll ended. (Original message not found)", embeds: [result] });
         } else {
-           message.reply("✅ Poll ended.");
+           message.reply({ content: "✅ Poll ended.", embeds: [result] });
         }
       } catch (error) {
         console.error(`💥 [${currentCount}] Error ending poll:`, error);
