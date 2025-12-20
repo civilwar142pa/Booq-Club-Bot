@@ -10,10 +10,6 @@
 !setpoint <description> - Set the reading goal (e.g., !setpoint Chapter 5)
 !clearpoint - Clear the current reading goal
 !link - Get the link to the Book Club Google Spreadsheet
-!spotifyauth - Authenticate the bot with Spotify (Admin only)
-!spotifylink - Get the link to the collaborative Spotify playlist
-!addsong <song name> - Search and add a song to the Spotify playlist
-!deletesong <song name> - Remove a song from the Spotify playlist
 !poll <title> - Create a voting poll that lasts for 3 days
 !endpoll - Manually end the active poll in the current channel
 !timehelp - Show help for date and time formats used in commands

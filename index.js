@@ -4,7 +4,6 @@ const { getSheetData } = require("./sheets");
 const { DateTime } = require("luxon");
 const fetch = require("node-fetch");
 const mongoose = require("mongoose");
-const SpotifyWebApi = require("spotify-web-api-node");
 
 // Generate a unique Session ID to identify this specific process
 const SESSION_ID = Math.floor(Math.random() * 100000).toString(16).toUpperCase();
@@ -34,13 +33,6 @@ const PollSchema = new mongoose.Schema({
 });
 
 const Poll = mongoose.model("Poll", PollSchema);
-
-// Spotify Token Schema
-const SpotifyTokenSchema = new mongoose.Schema({
-  _id: { type: String, default: "main_token" },
-  data: Object // Stores access_token, refresh_token, expires_at, etc.
-});
-const SpotifyToken = mongoose.model("SpotifyToken", SpotifyTokenSchema);
 
 const POLL_OPTIONS = [
   { label: "0", value: "0" },
@@ -163,129 +155,6 @@ class UptimeRobotMonitor {
 // Initialize UptimeRobot monitor
 const uptimeMonitor = new UptimeRobotMonitor();
 
-// SPOTIFY SERVICE
-class SpotifyService {
-  constructor() {
-    this.isEnabled = !!(process.env.SPOTIFY_CLIENT_ID && process.env.SPOTIFY_CLIENT_SECRET);
-    if (!this.isEnabled) {
-      console.warn("⚠️ Spotify credentials missing. Spotify commands will be disabled.");
-      return;
-    }
-
-    this.api = new SpotifyWebApi({
-      clientId: process.env.SPOTIFY_CLIENT_ID,
-      clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
-      redirectUri: process.env.SPOTIFY_REDIRECT_URI || "http://localhost:3000/callback"
-    });
-    this.playlistId = process.env.SPOTIFY_PLAYLIST_ID;
-  }
-
-  async init() {
-    if (!this.isEnabled) return;
-    try {
-      const doc = await SpotifyToken.findById("main_token");
-      if (doc && doc.data) {
-        this.api.setAccessToken(doc.data.access_token);
-        this.api.setRefreshToken(doc.data.refresh_token);
-        console.log("🎵 Spotify tokens loaded from MongoDB");
-        await this.refreshIfNeeded(doc.data);
-      } else {
-        console.log("⚠️ No Spotify tokens found in DB. Run !spotifyauth");
-      }
-    } catch (error) {
-      console.error("❌ Spotify Init Error:", error);
-    }
-  }
-
-  async refreshIfNeeded(tokenData) {
-    const now = Math.floor(Date.now() / 1000);
-    // Refresh if expired or expiring in next 5 minutes
-    if (tokenData.expires_at && now > tokenData.expires_at - 300) {
-      console.log("🔄 Refreshing Spotify Access Token...");
-      try {
-        const data = await this.api.refreshAccessToken();
-        await this.saveTokens(data.body);
-      } catch (error) {
-        console.error("❌ Error refreshing Spotify token:", error);
-      }
-    }
-  }
-
-  async saveTokens(body) {
-    const current = (await SpotifyToken.findById("main_token"))?.data || {};
-    
-    // Merge new data with old (to keep refresh_token if not returned)
-    const newData = { ...current, ...body };
-    
-    // Calculate absolute expiration time
-    if (body.expires_in) {
-      newData.expires_at = Math.floor(Date.now() / 1000) + body.expires_in;
-    }
-
-    this.api.setAccessToken(newData.access_token);
-    if (newData.refresh_token) this.api.setRefreshToken(newData.refresh_token);
-
-    await SpotifyToken.findByIdAndUpdate("main_token", { data: newData }, { upsert: true });
-    console.log("💾 Spotify tokens saved");
-  }
-
-  getAuthUrl() {
-    const scopes = ['playlist-modify-public', 'playlist-modify-private'];
-    return this.api.createAuthorizeURL(scopes, 'state');
-  }
-
-  async searchAndAdd(query) {
-    await this.refreshIfNeeded((await SpotifyToken.findById("main_token"))?.data || {});
-    
-    const searchRes = await this.api.searchTracks(query, { limit: 1 });
-    if (!searchRes.body.tracks.items.length) return null;
-
-    const track = searchRes.body.tracks.items[0];
-    
-    // Check duplicates (simple check)
-    const playlistTracks = await this.api.getPlaylistTracks(this.playlistId);
-    const isDuplicate = playlistTracks.body.items.some(item => item.track.id === track.id);
-    
-    if (isDuplicate) {
-      return { track, status: "duplicate" };
-    }
-
-    await this.api.addTracksToPlaylist(this.playlistId, [track.uri]);
-    return { track, status: "added" };
-  }
-
-  async removeSong(query) {
-    await this.refreshIfNeeded((await SpotifyToken.findById("main_token"))?.data || {});
-    
-    // 1. Search for the track to get URI
-    const searchRes = await this.api.searchTracks(query, { limit: 1 });
-    if (!searchRes.body.tracks.items.length) return { status: "not_found" };
-    
-    const trackTarget = searchRes.body.tracks.items[0];
-
-    // 2. Scan playlist to see if it's there
-    const playlistTracks = await this.api.getPlaylistTracks(this.playlistId);
-    const match = playlistTracks.body.items.find(item => item.track.id === trackTarget.id);
-
-    if (!match) return { status: "not_in_playlist", track: trackTarget };
-
-    // 3. Remove
-    await this.api.removeTracksFromPlaylist(this.playlistId, [{ uri: trackTarget.uri }]);
-    return { status: "removed", track: trackTarget };
-  }
-
-  async getPlaylistLink() {
-    try {
-      const data = await this.api.getPlaylist(this.playlistId);
-      return data.body.external_urls.spotify;
-    } catch (e) {
-      return null;
-    }
-  }
-}
-
-const spotifyService = new SpotifyService();
-
 // SIMPLE EXPRESS SERVER FOR INTERNAL USE
 const app = express();
 const port = 3000;
@@ -320,24 +189,6 @@ app.get("/monitor", (req, res) => {
   res.send("BOOK_CLUB_BOT_ACTIVE");
 });
 
-// Spotify Callback Endpoint
-app.get("/callback", async (req, res) => {
-  const error = req.query.error;
-  const code = req.query.code;
-
-  if (error) {
-    return res.send(`Callback Error: ${error}`);
-  }
-
-  try {
-    const data = await spotifyService.api.authorizationCodeGrant(code);
-    await spotifyService.saveTokens(data.body);
-    res.send('✅ Spotify authentication successful! You can close this window.');
-  } catch (error) {
-    console.error('Error getting Tokens:', error);
-    res.send(`Error getting Tokens: ${error}`);
-  }
-});
 
 // Start the server
 const server = app.listen(process.env.PORT || port, '0.0.0.0', () => {
@@ -385,9 +236,6 @@ async function initializeBot() {
         meetingInfo = storage.meetingInfo || meetingInfo;
         console.log("📥 Loaded data from database");
       }
-
-      // 3. Initialize Spotify
-      await spotifyService.init();
     } catch (error) {
       console.error("❌ MongoDB Connection Error:", error);
     }
@@ -604,7 +452,7 @@ async function createBookClubEvent(
            channel.name.toLowerCase().includes('club') ||
            channel.name.toLowerCase().includes('meeting'))
       );
-      
+
       // If still not found, use first available voice channel
       if (!voiceChannel) {
         const voiceChannels = guild.channels.cache.filter(ch => ch.type === 2);
@@ -640,7 +488,7 @@ async function createBookClubEvent(
 
 // Poll Helper Functions
 async function finishPoll(poll, message) {
-  if (!poll.isActive) return null;
+  if (!poll.isActive) return;
 
   let totalScore = 0;
   let totalVotes = 0;
@@ -679,7 +527,6 @@ async function finishPoll(poll, message) {
 
   poll.isActive = false;
   await poll.save();
-  return resultEmbed;
 }
 
 function monitorPoll(poll, message) {
@@ -718,12 +565,12 @@ let commandCount = 0;
 client.on("messageCreate", async (message) => {
   commandCount++;
   const currentCount = commandCount;
-  
+
   if (message.author.bot) {
     console.log(`🚫 [${currentCount}] Ignored bot message from: ${message.author.tag}`);
     return;
   }
-  
+
   if (!message.content.startsWith(PREFIX)) {
     console.log(`🚫 [${currentCount}] Ignored non-command: ${message.content.substring(0, 30)}...`);
     return;
@@ -734,7 +581,7 @@ client.on("messageCreate", async (message) => {
   if (categoryId && message.guild) {
     // Check if this category ID actually exists in this specific server
     const category = message.guild.channels.cache.get(categoryId);
-    
+
     // If the category exists in this server, we enforce the restriction
     if (category) {
       if (message.channel.parentId !== categoryId) {
@@ -752,7 +599,7 @@ client.on("messageCreate", async (message) => {
   console.log(`   Author: ${message.author.tag} (${message.author.id})`);
   console.log(`   Channel: ${message.channel.id}`);
   console.log(`   Timestamp: ${Date.now()}`);
-  
+
   const args = message.content.slice(PREFIX.length).trim().split(/ +/);
   const command = args.shift().toLowerCase();
 
@@ -767,11 +614,10 @@ client.on("messageCreate", async (message) => {
         .addFields(
           { name: '📚 Reading', value: '`!reading` - Current book\n`!currentpoint` - Reading goal\n`!pastreads` - Past books list\n`!random` - Pick random future option' },
           { name: '📅 Meetings', value: '`!nextmeeting` - Meeting info\n`!setmeeting` - Schedule meeting\n`!clearevent` - Cancel meeting' },
-          { name: '🎵 Spotify', value: '`!addsong <name>` - Add to playlist\n`!deletesong <name>` - Remove from playlist\n`!spotifylink` - Get playlist link' },
           { name: '⚙️ Utility', value: '`!poll` - Start a voting poll\n`!setpoint` - Set reading goal\n`!clearpoint` - Clear reading goal\n`!link` - Spreadsheet link\n`!timehelp` - Date format help\n`!status` - Bot health' }
         )
         .setFooter({ text: 'Booq Club Bot' });
-      
+
       message.reply({ embeds: [helpEmbed] });
       console.log(`🏁 [${currentCount}] !commands completed`);
       break;
@@ -820,9 +666,9 @@ client.on("messageCreate", async (message) => {
             .setColor(0x0099FF)
             .setTitle('📖 Currently Reading')
             .setDescription(`**${current[0]}**\n*by ${current[1]}*`);
-          
+
           if (current[3]) readingEmbed.addFields({ name: '🔗 Link', value: `[View Book](${current[3]})` });
-          
+
           message.reply({ embeds: [readingEmbed] });
         } else {
           console.log(`❌ [${currentCount}] No current book found`);
@@ -872,7 +718,7 @@ client.on("messageCreate", async (message) => {
         const data = await getSheetData();
         // Skip header row
         const books = data.slice(1);
-        
+
         // Filter for books marked as 'finished' or 'read' (handles both keywords)
         const pastBooks = books.filter((row) => {
           const status = row[2]?.toLowerCase().trim();
@@ -882,7 +728,7 @@ client.on("messageCreate", async (message) => {
         if (pastBooks.length > 0) {
           // Get the last 15 books to avoid hitting Discord's message length limit
           const recentReads = pastBooks.slice(-10); // Limit to 10 for a cleaner embed look
-          
+
           const embed = new EmbedBuilder()
             .setColor(0x0099FF) // Blue color
             .setTitle('📚 Past Reads & Ratings')
@@ -896,11 +742,11 @@ client.on("messageCreate", async (message) => {
             const link = book[3];
             // Rating is expected in the 5th column (index 4)
             const rating = book[4];
-            
+
             let entry = `**${index + 1}. ${title}** • *by ${author}*`;
             if (rating) entry += ` • ⭐ **${rating}/5**`;
             if (link) entry += ` •[ View Book](${link})`;
-            
+
             return entry;
           }).join("\n\n");
 
@@ -931,12 +777,12 @@ client.on("messageCreate", async (message) => {
       console.log(`📅 [${currentCount}] Processing !nextmeeting`);
       if (meetingInfo.isoDate) {
         const formattedDate = formatMeetingDate(meetingInfo.isoDate);
-        
+
         const meetingEmbed = new EmbedBuilder()
           .setColor(0xF1C40F) // Gold/Yellow
           .setTitle('📅 Next Meeting')
           .setDescription(`**${formattedDate}**`);
-        
+
         if (meetingInfo.eventId) {
           try {
             const guild = message.guild;
@@ -1021,7 +867,7 @@ client.on("messageCreate", async (message) => {
 
         let eventUrl = null;
         try {
-          
+
             if (message.guild) {
               const event = await createBookClubEvent(
                 message.guild,
@@ -1040,12 +886,12 @@ client.on("messageCreate", async (message) => {
         await saveStorage(storage);
 
         console.log(`✅ [${currentCount}] Meeting set successfully`);
-        
+
         const successEmbed = new EmbedBuilder()
             .setColor(0x00FF00)
             .setTitle('✅ Meeting Set!')
             .addFields({ name: 'When', value: formatMeetingDate(meetingInfo.isoDate) });
-        
+
         if (eventUrl) {
             successEmbed.addFields({ name: '📅 Discord Event', value: eventUrl });
         }
@@ -1062,7 +908,7 @@ client.on("messageCreate", async (message) => {
       console.log(`🗑️ [${currentCount}] Processing !clearevent`);
       try {
         let responseMessage = "";
-        
+
         if (meetingInfo.eventId) {
           try {
             const guild = message.guild;
@@ -1077,34 +923,34 @@ client.on("messageCreate", async (message) => {
             responseMessage += "⚠️ *Discord event was not found (may have been deleted already)*\n";
           }
         }
-        
+
         const oldMeetingInfo = { ...meetingInfo };
-        
+
         meetingInfo = {
           date: null,
           time: null,
           eventId: null,
           isoDate: null,
         };
-        
+
         storage.meetingInfo = meetingInfo;
         await saveStorage(storage);
-        
+
         responseMessage += "✅ **Meeting data cleared!**\n";
-        
+
         if (oldMeetingInfo.date) {
           responseMessage += `*Cleared: ${oldMeetingInfo.date}${oldMeetingInfo.time ? ` at ${oldMeetingInfo.time}` : ''}*`;
         }
-        
+
         console.log(`✅ [${currentCount}] Meeting data cleared`);
-        
+
         const clearEmbed = new EmbedBuilder()
             .setColor(0xE74C3C) // Red/Orange
             .setTitle('🗑️ Meeting Cleared')
             .setDescription(responseMessage);
-        
+
         message.reply({ embeds: [clearEmbed] });
-        
+
       } catch (error) {
         console.error(`💥 [${currentCount}] Error clearing event:`, error);
         message.reply("❌ Sorry, there was an error clearing the event data.");
@@ -1159,7 +1005,7 @@ client.on("messageCreate", async (message) => {
 
     case "clearpoint":
       console.log(`🗑️ [${currentCount}] Processing !clearpoint`);
-      
+
       const previousPoint = currentPoint;
       currentPoint = null;
       storage.readingPoint = null;
@@ -1185,76 +1031,6 @@ client.on("messageCreate", async (message) => {
       console.log(`🏁 [${currentCount}] !link completed`);
       break;
 
-    case "spotifyauth":
-      if (!spotifyService.isEnabled) return message.reply("Spotify is not configured.");
-      const authUrl = spotifyService.getAuthUrl();
-      const authEmbed = new EmbedBuilder()
-        .setColor(0x1DB954)
-        .setTitle('🔐 Spotify Authentication')
-        .setDescription(`Click here to authorize the bot`)
-        .setFooter({ text: 'Only required once or if tokens expire completely' });
-      message.reply({ embeds: [authEmbed] });
-      break;
-
-    case "spotifylink":
-      const sLink = await spotifyService.getPlaylistLink();
-      if (sLink) {
-        message.reply(`🎵 **Spotify Playlist:**\n${sLink}`);
-      } else {
-        message.reply("Could not retrieve playlist link.");
-      }
-      break;
-
-    case "addsong":
-      if (!args.length) return message.reply("Usage: `!addsong <song name>`");
-      const query = args.join(" ");
-      message.channel.sendTyping();
-      
-      try {
-        const result = await spotifyService.searchAndAdd(query);
-        if (!result) {
-          message.reply("❌ Could not find that song.");
-        } else if (result.status === "duplicate") {
-          message.reply(`⚠️ **${result.track.name}** by ${result.track.artists[0].name} is already in the playlist!`);
-        } else {
-          const addEmbed = new EmbedBuilder()
-            .setColor(0x1DB954)
-            .setTitle('✅ Song Added')
-            .setDescription(`**${result.track.name}**\n*by ${result.track.artists[0].name}*`)
-            .setThumbnail(result.track.album.images[0]?.url);
-          message.reply({ embeds: [addEmbed] });
-        }
-      } catch (err) {
-        console.error(err);
-        message.reply("❌ Error adding song. The bot might need re-authentication (`!spotifyauth`).");
-      }
-      break;
-
-    case "deletesong":
-      if (!args.length) return message.reply("Usage: `!deletesong <song name>`");
-      const delQuery = args.join(" ");
-      message.channel.sendTyping();
-
-      try {
-        const result = await spotifyService.removeSong(delQuery);
-        
-        if (result.status === "not_found") {
-          message.reply("❌ Could not find that song on Spotify to identify it.");
-        } else if (result.status === "not_in_playlist") {
-          message.reply(`⚠️ Found **${result.track.name}**, but it's not in the playlist.`);
-        } else {
-          const delEmbed = new EmbedBuilder()
-            .setColor(0xE74C3C)
-            .setTitle('🗑️ Song Removed')
-            .setDescription(`**${result.track.name}**\n*by ${result.track.artists[0].name}*`);
-          message.reply({ embeds: [delEmbed] });
-        }
-      } catch (err) {
-        console.error(err);
-        message.reply("❌ Error removing song.");
-      }
-      break;
-
     case "poll":
       console.log(`📊 [${currentCount}] Processing !poll`);
       if (args.length === 0) {
@@ -1262,6 +1038,7 @@ client.on("messageCreate", async (message) => {
           .setColor(0x0099FF)
           .setTitle('📊 How to use Poll')
           .setDescription('**Usage:** `!poll <title>`\nCreates a rating poll that lasts for 3 days.')
+          .setDescription('**Usage:** `!poll <title>`\nCreates a rating poll that lasts for 12 hours.')
           .addFields({ name: 'Example', value: '`!poll Rate this week\'s book`' });
         message.reply({ embeds: [pollHelpEmbed] });
         return;
@@ -1269,7 +1046,7 @@ client.on("messageCreate", async (message) => {
 
       const pollTitle = args.join(" ");
       const pollDuration = 3 * 24 * 60 * 60 * 1000; // 3 days
-      
+
       const pollEmbed = new EmbedBuilder()
         .setColor(0x0099FF)
         .setTitle(`📊 ${pollTitle}`)
@@ -1306,37 +1083,28 @@ client.on("messageCreate", async (message) => {
       break;
 
     case "endpoll":
-      console.log(`🛑 [${currentCount}] Processing !endpoll`);
+      console.log(`📊 [${currentCount}] Processing !endpoll`);
       try {
-        const activePoll = await Poll.findOne({ 
-          channelId: message.channel.id, 
-          isActive: true 
-        }).sort({ _id: -1 });
-
+        const activePoll = await Poll.findOne({ channelId: message.channel.id, isActive: true });
+        
         if (!activePoll) {
-          message.reply("No active poll found in this channel.");
+          message.reply("❌ No active poll found in this channel.");
           return;
         }
 
-        let pollMessage = null;
+        let originalPollMessage = null;
         try {
-          pollMessage = await message.channel.messages.fetch(activePoll.messageId);
-        } catch (e) {
-          console.log("Original poll message not found");
+          originalPollMessage = await message.channel.messages.fetch(activePoll.messageId);
+        } catch (err) {
+          console.log(`⚠️ Original poll message not found: ${err.message}`);
         }
 
-        const result = await finishPoll(activePoll, pollMessage);
-        
-        if (!pollMessage && result) {
-           message.reply({ content: "✅ Poll ended. (Original message not found)", embeds: [result] });
-        } else {
-           message.reply({ content: "✅ Poll ended.", embeds: [result] });
-        }
+        await finishPoll(activePoll, originalPollMessage);
+        message.reply("✅ Poll ended manually.");
       } catch (error) {
         console.error(`💥 [${currentCount}] Error ending poll:`, error);
-        message.reply("❌ An error occurred while trying to end the poll.");
+        message.reply("❌ An error occurred while ending the poll.");
       }
-      console.log(`🏁 [${currentCount}] !endpoll completed`);
       break;
 
     case "timehelp":
@@ -1383,7 +1151,7 @@ client.on("reconnecting", () => {
 // Graceful shutdown
 const gracefulShutdown = async (signal) => {
   console.log(`🛑 ${signal} received. Shutting down gracefully...`);
-  
+
   uptimeMonitor.stopHeartbeats();
   await mongoose.disconnect();
   client.destroy();
