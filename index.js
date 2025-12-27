@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, ActivityType, EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder } = require("discord.js");
+const { Client, GatewayIntentBits, ActivityType, EmbedBuilder } = require("discord.js");
 const express = require("express");
 const { getSheetData } = require("./sheets");
 const { DateTime } = require("luxon");
@@ -21,31 +21,6 @@ const SettingsSchema = new mongoose.Schema({
 });
 
 const Settings = mongoose.model("Settings", SettingsSchema);
-
-// Poll Schema for persistent voting
-const PollSchema = new mongoose.Schema({
-  messageId: String,
-  channelId: String,
-  title: String,
-  expiresAt: Date,
-  votes: { type: Map, of: Number, default: {} },
-  isActive: { type: Boolean, default: true }
-});
-
-const Poll = mongoose.model("Poll", PollSchema);
-
-const POLL_OPTIONS = [
-  { label: "0", value: "0" },
-  { label: "1⭐️", value: "1" },
-  { label: "1.5⭐️💫", value: "1.5" },
-  { label: "2⭐️⭐️", value: "2" },
-  { label: "2.5⭐️⭐️💫", value: "2.5" },
-  { label: "3⭐️⭐️⭐️", value: "3" },
-  { label: "3.5⭐️⭐️⭐️💫", value: "3.5" },
-  { label: "4⭐️⭐️⭐️⭐️", value: "4" },
-  { label: "4.5⭐️⭐️⭐️⭐️💫", value: "4.5" },
-  { label: "5⭐️⭐️⭐️⭐️⭐️", value: "5" }
-];
 
 // Initialize default state (will be overwritten by DB load)
 let storage = {
@@ -264,32 +239,6 @@ client.once("ready", () => {
   console.log(`📖 Loaded reading point: ${currentPoint}`);
   console.log(`📅 Loaded meeting info:`, meetingInfo);
 
-  // Recover active polls
-  (async () => {
-    try {
-      const activePolls = await Poll.find({ isActive: true });
-      if (activePolls.length > 0) {
-        console.log(`📊 Found ${activePolls.length} active polls to recover.`);
-        for (const poll of activePolls) {
-          try {
-            const channel = await client.channels.fetch(poll.channelId);
-            if (channel) {
-              const message = await channel.messages.fetch(poll.messageId);
-              if (message) {
-                monitorPoll(poll, message);
-                console.log(`   Recovered poll: ${poll.title}`);
-              }
-            }
-          } catch (err) {
-            console.error(`   Failed to recover poll ${poll.title}:`, err.message);
-          }
-        }
-      }
-    } catch (error) {
-      console.error("Error loading active polls:", error);
-    }
-  })();
-
   // START UPTIMEROBOT HEARTBEATS
   uptimeMonitor.startHeartbeats(60000); // Every 60 seconds
 
@@ -452,7 +401,7 @@ async function createBookClubEvent(
            channel.name.toLowerCase().includes('club') ||
            channel.name.toLowerCase().includes('meeting'))
       );
-
+      
       // If still not found, use first available voice channel
       if (!voiceChannel) {
         const voiceChannels = guild.channels.cache.filter(ch => ch.type === 2);
@@ -486,91 +435,17 @@ async function createBookClubEvent(
   }
 }
 
-// Poll Helper Functions
-async function finishPoll(poll, message) {
-  if (!poll.isActive) return;
-
-  let totalScore = 0;
-  let totalVotes = 0;
-  
-  if (poll.votes && poll.votes.size > 0) {
-    totalVotes = poll.votes.size;
-    for (const score of poll.votes.values()) {
-      totalScore += score;
-    }
-  }
-
-  const average = totalVotes > 0 ? (totalScore / totalVotes).toFixed(2) : "N/A";
-
-  const resultEmbed = new EmbedBuilder()
-    .setColor(0x00FF00)
-    .setTitle(`📊 Poll Results: ${poll.title}`)
-    .setDescription(`**Average Score:** ${average}/5\n**Total Votes:** ${totalVotes}`)
-    .setTimestamp();
-
-  try {
-    if (message) {
-      const disabledSelect = new StringSelectMenuBuilder()
-        .setCustomId('poll_select_ended')
-        .setPlaceholder('Poll Ended')
-        .setDisabled(true)
-        .addOptions(POLL_OPTIONS); // Reuse options for visual consistency
-
-      const disabledRow = new ActionRowBuilder().addComponents(disabledSelect);
-      
-      await message.edit({ components: [disabledRow] });
-      await message.reply({ embeds: [resultEmbed] });
-    }
-  } catch (error) {
-    console.error("Error finishing poll:", error);
-  }
-
-  poll.isActive = false;
-  await poll.save();
-}
-
-function monitorPoll(poll, message) {
-  const now = new Date();
-  const remainingTime = poll.expiresAt - now;
-
-  if (remainingTime <= 0) {
-    finishPoll(poll, message);
-    return;
-  }
-
-  const collector = message.createMessageComponentCollector({ time: remainingTime });
-
-  collector.on('collect', async i => {
-    const value = parseFloat(i.values[0]);
-    
-    // Update vote in DB
-    if (!poll.votes) poll.votes = new Map();
-    poll.votes.set(i.user.id, value);
-    poll.markModified('votes');
-    await poll.save();
-
-    const label = POLL_OPTIONS.find(o => o.value === i.values[0])?.label || value;
-    await i.reply({ content: `You voted: ${label}`, ephemeral: true });
-  });
-
-  collector.on('end', (collected, reason) => {
-    if (reason === 'time') {
-      finishPoll(poll, message);
-    }
-  });
-}
-
 // COMPLETE MESSAGE HANDLER WITH ALL COMMANDS
 let commandCount = 0;
 client.on("messageCreate", async (message) => {
   commandCount++;
   const currentCount = commandCount;
-
+  
   if (message.author.bot) {
     console.log(`🚫 [${currentCount}] Ignored bot message from: ${message.author.tag}`);
     return;
   }
-
+  
   if (!message.content.startsWith(PREFIX)) {
     console.log(`🚫 [${currentCount}] Ignored non-command: ${message.content.substring(0, 30)}...`);
     return;
@@ -581,7 +456,7 @@ client.on("messageCreate", async (message) => {
   if (categoryId && message.guild) {
     // Check if this category ID actually exists in this specific server
     const category = message.guild.channels.cache.get(categoryId);
-
+    
     // If the category exists in this server, we enforce the restriction
     if (category) {
       if (message.channel.parentId !== categoryId) {
@@ -599,7 +474,7 @@ client.on("messageCreate", async (message) => {
   console.log(`   Author: ${message.author.tag} (${message.author.id})`);
   console.log(`   Channel: ${message.channel.id}`);
   console.log(`   Timestamp: ${Date.now()}`);
-
+  
   const args = message.content.slice(PREFIX.length).trim().split(/ +/);
   const command = args.shift().toLowerCase();
 
@@ -614,10 +489,10 @@ client.on("messageCreate", async (message) => {
         .addFields(
           { name: '📚 Reading', value: '`!reading` - Current book\n`!currentpoint` - Reading goal\n`!pastreads` - Past books list\n`!random` - Pick random future option' },
           { name: '📅 Meetings', value: '`!nextmeeting` - Meeting info\n`!setmeeting` - Schedule meeting\n`!clearevent` - Cancel meeting' },
-          { name: '⚙️ Utility', value: '`!poll` - Start a voting poll\n`!setpoint` - Set reading goal\n`!clearpoint` - Clear reading goal\n`!link` - Spreadsheet link\n`!timehelp` - Date format help\n`!status` - Bot health' }
+          { name: '⚙️ Utility', value: '`!setpoint` - Set reading goal\n`!clearpoint` - Clear reading goal\n`!link` - Spreadsheet link\n`!timehelp` - Date format help\n`!status` - Bot health' }
         )
         .setFooter({ text: 'Booq Club Bot' });
-
+      
       message.reply({ embeds: [helpEmbed] });
       console.log(`🏁 [${currentCount}] !commands completed`);
       break;
@@ -666,9 +541,9 @@ client.on("messageCreate", async (message) => {
             .setColor(0x0099FF)
             .setTitle('📖 Currently Reading')
             .setDescription(`**${current[0]}**\n*by ${current[1]}*`);
-
+          
           if (current[3]) readingEmbed.addFields({ name: '🔗 Link', value: `[View Book](${current[3]})` });
-
+          
           message.reply({ embeds: [readingEmbed] });
         } else {
           console.log(`❌ [${currentCount}] No current book found`);
@@ -718,7 +593,7 @@ client.on("messageCreate", async (message) => {
         const data = await getSheetData();
         // Skip header row
         const books = data.slice(1);
-
+        
         // Filter for books marked as 'finished' or 'read' (handles both keywords)
         const pastBooks = books.filter((row) => {
           const status = row[2]?.toLowerCase().trim();
@@ -728,7 +603,7 @@ client.on("messageCreate", async (message) => {
         if (pastBooks.length > 0) {
           // Get the last 15 books to avoid hitting Discord's message length limit
           const recentReads = pastBooks.slice(-10); // Limit to 10 for a cleaner embed look
-
+          
           const embed = new EmbedBuilder()
             .setColor(0x0099FF) // Blue color
             .setTitle('📚 Past Reads & Ratings')
@@ -742,11 +617,11 @@ client.on("messageCreate", async (message) => {
             const link = book[3];
             // Rating is expected in the 5th column (index 4)
             const rating = book[4];
-
+            
             let entry = `**${index + 1}. ${title}** • *by ${author}*`;
             if (rating) entry += ` • ⭐ **${rating}/5**`;
             if (link) entry += ` •[ View Book](${link})`;
-
+            
             return entry;
           }).join("\n\n");
 
@@ -777,12 +652,12 @@ client.on("messageCreate", async (message) => {
       console.log(`📅 [${currentCount}] Processing !nextmeeting`);
       if (meetingInfo.isoDate) {
         const formattedDate = formatMeetingDate(meetingInfo.isoDate);
-
+        
         const meetingEmbed = new EmbedBuilder()
           .setColor(0xF1C40F) // Gold/Yellow
           .setTitle('📅 Next Meeting')
           .setDescription(`**${formattedDate}**`);
-
+        
         if (meetingInfo.eventId) {
           try {
             const guild = message.guild;
@@ -867,7 +742,7 @@ client.on("messageCreate", async (message) => {
 
         let eventUrl = null;
         try {
-
+          
             if (message.guild) {
               const event = await createBookClubEvent(
                 message.guild,
@@ -886,12 +761,12 @@ client.on("messageCreate", async (message) => {
         await saveStorage(storage);
 
         console.log(`✅ [${currentCount}] Meeting set successfully`);
-
+        
         const successEmbed = new EmbedBuilder()
             .setColor(0x00FF00)
             .setTitle('✅ Meeting Set!')
             .addFields({ name: 'When', value: formatMeetingDate(meetingInfo.isoDate) });
-
+        
         if (eventUrl) {
             successEmbed.addFields({ name: '📅 Discord Event', value: eventUrl });
         }
@@ -908,7 +783,7 @@ client.on("messageCreate", async (message) => {
       console.log(`🗑️ [${currentCount}] Processing !clearevent`);
       try {
         let responseMessage = "";
-
+        
         if (meetingInfo.eventId) {
           try {
             const guild = message.guild;
@@ -923,34 +798,34 @@ client.on("messageCreate", async (message) => {
             responseMessage += "⚠️ *Discord event was not found (may have been deleted already)*\n";
           }
         }
-
+        
         const oldMeetingInfo = { ...meetingInfo };
-
+        
         meetingInfo = {
           date: null,
           time: null,
           eventId: null,
           isoDate: null,
         };
-
+        
         storage.meetingInfo = meetingInfo;
         await saveStorage(storage);
-
+        
         responseMessage += "✅ **Meeting data cleared!**\n";
-
+        
         if (oldMeetingInfo.date) {
           responseMessage += `*Cleared: ${oldMeetingInfo.date}${oldMeetingInfo.time ? ` at ${oldMeetingInfo.time}` : ''}*`;
         }
-
+        
         console.log(`✅ [${currentCount}] Meeting data cleared`);
-
+        
         const clearEmbed = new EmbedBuilder()
             .setColor(0xE74C3C) // Red/Orange
             .setTitle('🗑️ Meeting Cleared')
             .setDescription(responseMessage);
-
+        
         message.reply({ embeds: [clearEmbed] });
-
+        
       } catch (error) {
         console.error(`💥 [${currentCount}] Error clearing event:`, error);
         message.reply("❌ Sorry, there was an error clearing the event data.");
@@ -1005,7 +880,7 @@ client.on("messageCreate", async (message) => {
 
     case "clearpoint":
       console.log(`🗑️ [${currentCount}] Processing !clearpoint`);
-
+      
       const previousPoint = currentPoint;
       currentPoint = null;
       storage.readingPoint = null;
@@ -1029,81 +904,6 @@ client.on("messageCreate", async (message) => {
             .addFields({ name: 'Link', value: 'https://docs.google.com/spreadsheets/d/1TRraVAkBbpZHz0oLLe0TRkx9i8F4OwAUMkP4gm74nYs/edit' });
       message.reply({ embeds: [linkEmbed] });
       console.log(`🏁 [${currentCount}] !link completed`);
-      break;
-
-    case "poll":
-      console.log(`📊 [${currentCount}] Processing !poll`);
-      if (args.length === 0) {
-        const pollHelpEmbed = new EmbedBuilder()
-          .setColor(0x0099FF)
-          .setTitle('📊 How to use Poll')
-          .setDescription('**Usage:** `!poll <title>`\nCreates a rating poll that lasts for 3 days.')
-          .addFields({ name: 'Example', value: '`!poll Rate this week\'s book`' });
-        message.reply({ embeds: [pollHelpEmbed] });
-        return;
-      }
-
-      const pollTitle = args.join(" ");
-      const pollDuration = 3 * 24 * 60 * 60 * 1000; // 3 days
-
-      const pollEmbed = new EmbedBuilder()
-        .setColor(0x0099FF)
-        .setTitle(`📊 ${pollTitle}`)
-        .setDescription(`Select your rating from the menu below!\n\n*Poll ends in 3 days.*`)
-        .setFooter({ text: 'Booq Club Poll' })
-        .setTimestamp();
-
-      const selectMenu = new StringSelectMenuBuilder()
-        .setCustomId('poll_select')
-        .setPlaceholder('Select a rating...')
-        .addOptions(POLL_OPTIONS);
-
-      const row = new ActionRowBuilder()
-        .addComponents(selectMenu);
-
-      const pollMessage = await message.channel.send({ embeds: [pollEmbed], components: [row] });
-      
-      // Save to DB
-      const newPoll = new Poll({
-        messageId: pollMessage.id,
-        channelId: message.channel.id,
-        title: pollTitle,
-        expiresAt: new Date(Date.now() + pollDuration),
-        votes: {},
-        isActive: true
-      });
-      
-      await newPoll.save();
-
-      // Start monitoring
-      monitorPoll(newPoll, pollMessage);
-
-      console.log(`✅ [${currentCount}] Poll started: ${pollTitle}`);
-      break;
-
-    case "endpoll":
-      console.log(`📊 [${currentCount}] Processing !endpoll`);
-      try {
-        const activePoll = await Poll.findOne({ channelId: message.channel.id, isActive: true });
-        
-        if (!activePoll) {
-          message.reply("❌ No active poll found in this channel.");
-          return;
-        }
-
-        let originalPollMessage = null;
-        try {
-          originalPollMessage = await message.channel.messages.fetch(activePoll.messageId);
-        } catch (err) {
-          console.log(`⚠️ Original poll message not found: ${err.message}`);
-        }
-
-        await finishPoll(activePoll, originalPollMessage);
-        message.reply("✅ Poll ended manually.");
-      } catch (error) {
-        console.error(`💥 [${currentCount}] Error ending poll:`, error);
-        message.reply("❌ An error occurred while ending the poll.");
-      }
       break;
 
     case "timehelp":
@@ -1150,10 +950,20 @@ client.on("reconnecting", () => {
 // Graceful shutdown
 const gracefulShutdown = async (signal) => {
   console.log(`🛑 ${signal} received. Shutting down gracefully...`);
+  
+  // Force shutdown after 5 seconds if it hangs
+  setTimeout(() => {
+    console.error("🛑 Shutdown timed out, forcing exit...");
+    process.exit(1);
+  }, 5000);
 
   uptimeMonitor.stopHeartbeats();
-  await mongoose.disconnect();
-  client.destroy();
+  try {
+    await mongoose.disconnect();
+    await client.destroy();
+  } catch (error) {
+    console.error("Error during shutdown cleanup:", error);
+  }
   process.exit(0);
 };
 
