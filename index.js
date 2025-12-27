@@ -317,6 +317,19 @@ function parseMeetingDateTime(dateStr, timeStr) {
     "d MMMM ha", // "15 December 7pm" (UK format)
     "d MMMM yyyy h:mma", // "15 December 2024 7:00pm" (UK format with year)
     "d MMMM yyyy ha", // "15 December 2024 7pm" (UK format with year)
+    "d MMM yyyy h:mma", // "15 Dec 2024 7:00pm"
+    "d MMM yyyy ha", // "15 Dec 2024 7pm"
+    "MMM d, yyyy h:mma", // "Dec 15, 2024 7:00pm"
+    "MMM d, yyyy ha", // "Dec 15, 2024 7pm"
+    "MMM d yyyy h:mma", // "Dec 15 2024 7:00pm"
+    "MMM d yyyy ha", // "Dec 15 2024 7pm"
+    "MMMM d, yyyy", // "December 15, 2024"
+    "MMMM d yyyy", // "December 15 2024"
+    "MMM d, yyyy", // "Dec 15, 2024"
+    "MMM d yyyy", // "Dec 15 2024"
+    "d MMMM yyyy", // "15 December 2024"
+    "d MMM yyyy", // "15 Dec 2024"
+    "yyyy-MM-dd", // "2024-12-15"
   ];
 
   let parsedDate = null;
