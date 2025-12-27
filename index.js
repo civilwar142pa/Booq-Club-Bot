@@ -378,10 +378,7 @@ function parseMeetingDateTime(dateStr, timeStr) {
     const naturalAttempt = DateTime.fromJSDate(new Date(combined), {
       zone: DEFAULT_TIMEZONE,
     });
-    if (
-      naturalAttempt.isValid &&
-      naturalAttempt > DateTime.now().setZone(DEFAULT_TIMEZONE)
-    ) {
+    if (naturalAttempt.isValid) {
       parsedDate = naturalAttempt;
     }
   }
@@ -398,6 +395,16 @@ function parseMeetingDateTime(dateStr, timeStr) {
       second: 0,
       millisecond: 0,
     });
+  }
+
+  // Smart year adjustment:
+  // If the date is in the past AND the user didn't explicitly type a year (like "2025" or "2026"),
+  // assume they meant the next occurrence of this date (next year).
+  const now = DateTime.now().setZone(DEFAULT_TIMEZONE);
+  const hasYear = /\b20\d{2}\b/.test(combined); // Checks for 2024, 2025, 2026, etc.
+
+  if (parsedDate.isValid && parsedDate < now && !hasYear) {
+    parsedDate = parsedDate.plus({ years: 1 });
   }
 
   return parsedDate;
