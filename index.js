@@ -309,13 +309,17 @@ function parseMeetingDateTime(dateStr, timeStr) {
     "MMM d ha", // "Dec 15 7pm"
     "MMMM d, yyyy h:mma", // "December 15, 2024 7:00pm"
     "MMMM d, yyyy ha", // "December 15, 2024 7pm"
+    "MMMM d yyyy h:mma", // "December 15 2024 7:00pm" (No comma)
+    "MMMM d yyyy ha", // "December 15 2024 7pm" (No comma)
     "yyyy-MM-dd h:mma", // "2024-12-15 7:00pm"
     "yyyy-MM-dd ha", // "2024-12-15 7pm"
     "d MMMM h:mma", // "15 December 7:00pm" (UK format)
     "d MMMM ha", // "15 December 7pm" (UK format)
+    "d MMMM yyyy h:mma", // "15 December 2024 7:00pm" (UK format with year)
+    "d MMMM yyyy ha", // "15 December 2024 7pm" (UK format with year)
   ];
 
-  let parsedDate = DateTime.now().setZone(DEFAULT_TIMEZONE);
+  let parsedDate = null;
 
   // Try structured formats first with UK timezone
   for (const format of formats) {
@@ -329,10 +333,7 @@ function parseMeetingDateTime(dateStr, timeStr) {
   }
 
   // If structured parsing failed, try natural language with UK timezone
-  if (
-    !parsedDate.isValid ||
-    parsedDate.equals(DateTime.now().setZone(DEFAULT_TIMEZONE))
-  ) {
+  if (!parsedDate) {
     const naturalAttempt = DateTime.fromJSDate(new Date(combined), {
       zone: DEFAULT_TIMEZONE,
     });
@@ -342,6 +343,10 @@ function parseMeetingDateTime(dateStr, timeStr) {
     ) {
       parsedDate = naturalAttempt;
     }
+  }
+
+  if (!parsedDate) {
+    return DateTime.invalid("Could not parse date");
   }
 
   // If no time specified, default to 7:00 PM UK time
