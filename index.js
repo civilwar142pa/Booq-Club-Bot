@@ -302,34 +302,62 @@ function parseMeetingDateTime(dateStr, timeStr) {
 
   // Try multiple common formats
   const formats = [
-    "MMMM d h:mma", // "December 15 7:00pm"
-    "MMMM d ha", // "December 15 7pm"
-    "MMMM d", // "December 15" (default to 7pm)
+    // Year first
+    "yyyy-MM-dd HH:mm", // "2023-12-15 7:00
     "MMM d h:mma", // "Dec 15 7:00pm"
     "MMM d ha", // "Dec 15 7pm"
-    "MMMM d, yyyy h:mma", // "December 15, 2024 7:00pm"
-    "MMMM d, yyyy ha", // "December 15, 2024 7pm"
-    "MMMM d yyyy h:mma", // "December 15 2024 7:00pm" (No comma)
-    "MMMM d yyyy ha", // "December 15 2024 7pm" (No comma)
-    "yyyy-MM-dd h:mma", // "2024-12-15 7:00pm"
-    "yyyy-MM-dd ha", // "2024-12-15 7pm"
-    "d MMMM h:mma", // "15 December 7:00pm" (UK format)
-    "d MMMM ha", // "15 December 7pm" (UK format)
-    "d MMMM yyyy h:mma", // "15 December 2024 7:00pm" (UK format with year)
-    "d MMMM yyyy ha", // "15 December 2024 7pm" (UK format with year)
-    "d MMM yyyy h:mma", // "15 Dec 2024 7:00pm"
-    "d MMM yyyy ha", // "15 Dec 2024 7pm"
-    "MMM d, yyyy h:mma", // "Dec 15, 2024 7:00pm"
-    "MMM d, yyyy ha", // "Dec 15, 2024 7pm"
-    "MMM d yyyy h:mma", // "Dec 15 2024 7:00pm"
-    "MMM d yyyy ha", // "Dec 15 2024 7pm"
-    "MMMM d, yyyy", // "December 15, 2024"
-    "MMMM d yyyy", // "December 15 2024"
-    "MMM d, yyyy", // "Dec 15, 2024"
-    "MMM d yyyy", // "Dec 15 2024"
-    "d MMMM yyyy", // "15 December 2024"
-    "d MMM yyyy", // "15 Dec 2024"
-    "yyyy-MM-dd", // "2024-12-15"
+
+    //UK Formats
+    "d MMMM yyyy HH:mm",
+    "d MMMM yyyy h:mma",
+    "d MMMM yyyy ha",
+    "d MMMM yyyy",
+    "d MMM yyyy HH:mm",
+    "d MMM yyyy h:mma",
+    "d MMM yyyy ha",
+    "d MMM yyyy",
+    "d/M/yyyy HH:mm",
+    "d/M/yyyy h:mma",
+    "d/M/yyyy ha",
+    "d/M/yyyy",
+
+    //US Formats
+    "MMMM d, yyyy HH:mm",
+    "MMMM d, yyyy h:mma",
+    "MMMM d, yyyy ha",
+    "MMMM d, yyyy",
+    "MMMM d yyyy HH:mm",
+    "MMMM d yyyy h:mma",
+    "MMMM d yyyy ha",
+    "MMMM d yyyy",
+    "MMM d, yyyy HH:mm",
+    "MMM d, yyyy h:mma",
+    "MMM d, yyyy ha",
+    "MMM d, yyyy",
+    "MMM d yyyy HH:mm",
+    "MMM d yyyy h:mma",
+    "MMM d yyyy ha",
+    "MMM d yyyy",
+    
+
+    //No year Formats
+    "MMMM d HH:mm",
+    "MMMM d h:mma",
+    "MMMM d ha",
+    "MMMM d",
+    "MMM d HH:mm",
+    "MMM d h:mma",
+    "MMM d ha",
+    "MMM d",
+    "d MMMM HH:mm",
+    "d MMMM h:mma",
+    "d MMMM ha",
+    "d MMMM",
+    "d MMM HH:mm",
+    "d MMM h:mma",
+    "d MMM ha",
+    "d MMM",
+    
   ];
 
   let parsedDate = null;
