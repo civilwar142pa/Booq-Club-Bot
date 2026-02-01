@@ -1,4 +1,3 @@
-const { Client, ActivityType, EmbedBuilder } = require("discord.js");
 const Discord = require("discord.js");
 const { Client, ActivityType, EmbedBuilder } = Discord;
 const GatewayIntentBits = Discord.GatewayIntentBits || Discord.default?.GatewayIntentBits;
