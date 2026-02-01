@@ -1,7 +1,4 @@
-const Discord = require("discord.js");
-const { Client, ActivityType, EmbedBuilder } = Discord;
-const GatewayIntentBits = Discord.GatewayIntentBits || Discord.default?.GatewayIntentBits;
-
+const { Client, ActivityType, EmbedBuilder, GatewayIntentBits } = require("discord.js");
 const express = require("express");
 const { getSheetData } = require("./sheets");
 const { DateTime } = require("luxon");
