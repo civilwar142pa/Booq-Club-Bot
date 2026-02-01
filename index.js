@@ -1,6 +1,5 @@
+const { Client, GatewayIntentBits, ActivityType, EmbedBuilder } = require("discord.js");
 const express = require("express");
-const Discord = require("discord.js");
-const { Client, ActivityType, EmbedBuilder } = Discord.default || Discord;
 const { getSheetData } = require("./sheets");
 const { DateTime } = require("luxon");
 const fetch = require("node-fetch");
@@ -183,7 +182,7 @@ server.on('error', (error) => {
 // ROBUST BOT WITH SELF-KEEP-ALIVE
 const client = new Client({
   intents: [
-    (Discord.GatewayIntentBits || Discord.default?.GatewayIntentBits).Guilds,
+    GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.GuildScheduledEvents,
