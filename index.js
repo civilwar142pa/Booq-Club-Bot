@@ -238,7 +238,7 @@ async function initializeBot() {
       if (error.code) {
         errorMessage += ` (Discord.js Error Code: ${error.code})`;
       }
-      console.error(errorMessage);
+      console.error(errorMessage, error); // Log the full error object for more details
 
       if (retryCount < maxLoginRetries) {
         const delay = baseRetryDelayMs * Math.pow(2, retryCount - 1); // Exponential backoff
