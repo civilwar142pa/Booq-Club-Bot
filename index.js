@@ -1182,7 +1182,72 @@ client.on("messageCreate", async (message) => {
       console.log(`🏁 [${currentCount}] !poll completed`);
       break;
 
+    case "testpoll":
+      console.log(`🧪 [${currentCount}] Running !testpoll`);
+      const testTitle = "Test Poll: Is the bot working?";
+      // Short 60-second duration for testing
+      const testEndTime = DateTime.now().plus({ minutes: 1 }).toJSDate();
+      
+      const testComponents = [];
+      const testOptionsData = [];
+
+      const testEmbed = new EmbedBuilder()
+        .setColor(0xFFA500) // Orange for test
+        .setTitle(`🧪 ${testTitle}`)
+        .setDescription(`This poll will end in **1 minute**. Click a button!`)
+        .addFields({ name: 'Ends', value: `<t:${Math.floor(testEndTime.getTime() / 1000)}:R>` });
+
+      for (let i = 0; i < pollOptions.length; i += 5) {
+        const row = new ActionRowBuilder();
+        const buttons = pollOptions.slice(i, i + 5).map(option => {
+          const customId = `poll_${Date.now()}_${option.value}`;
+          testOptionsData.push({ ...option, customId });
+          return new ButtonBuilder()
+            .setCustomId(customId)
+            .setLabel(option.label)
+            .setStyle(ButtonStyle.Secondary);
+        });
+        row.addComponents(buttons);
+        testComponents.push(row);
+      }
+
+      try {
+        const testMsg = await message.channel.send({ embeds: [testEmbed], components: testComponents });
+        
+        const testPollEntry = new Poll({
+          messageId: testMsg.id,
+          channelId: testMsg.channel.id,
+          guildId: message.guild.id,
+          title: testTitle,
+          endTime: testEndTime,
+          optionsData: testOptionsData,
+          votes: new Map(),
+        });
+
+        await testPollEntry.save();
+        
+        // Schedule the immediate end
+        setTimeout(() => endPoll(testPollEntry), 60000);
+        
+        message.reply("🧪 Test poll started! It will end in 60 seconds.");
+      } catch (error) {
+        console.error("Test poll failed:", error);
+        message.reply("❌ Test poll failed. Check the console.");
+      }
+      break;
+
     case "endpoll":
+      for (const [userId, ratingValue] of pollData.votes.entries()) {
+        if (typeof ratingValue == 'number') { //ensure valid number
+          totalScore += ratingValue;
+          totalVotes++;
+          const optionLabel = pollOptions.find(opt => opt.value === ratingValue)?.label;
+          if (optionLabel) {
+            results[optionLabel]++
+          }
+        }
+      }
+
       console.log(`🛑 [${currentCount}] Processing !endpoll`);
       try {
         const activePoll = await Poll.findOne({ channelId: message.channel.id });
