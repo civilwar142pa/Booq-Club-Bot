@@ -657,6 +657,15 @@ client.on("messageCreate", async (message) => {
   console.log(`   Timestamp: ${Date.now()}`);
   
   const args = message.content.slice(PREFIX.length).trim().split(/ +/);
+  
+  // Check if command is executed in a guild for guild-specific commands
+  const guildOnlyCommands = ['setmeeting', 'clearevent', 'poll', 'random', 'pastreads', 'reading', 'nextmeeting'];
+  if (guildOnlyCommands.includes(args[0]?.toLowerCase()) && !message.guild) {
+    console.log(`🚫 [${currentCount}] Ignored guild-only command "${args[0]}" in DM`);
+    return message.reply("This command can only be used in a server channel, not in a Direct Message.");
+  }
+
+
   const command = args.shift().toLowerCase();
 
   console.log(`   Parsed command: ${command}, args: ${args.join(', ')}`);
@@ -881,7 +890,6 @@ client.on("messageCreate", async (message) => {
               { name: 'Examples (UK Time)', value: '`!setmeeting December 15 7pm`\n`!setmeeting next friday`\n`!setmeeting 2024-12-15 19:00`' },
               { name: 'Note', value: 'If no time is specified, defaults to 7:00 PM UK time' }
           );
-        return message.reply({ embeds: [setMeetingHelpEmbed] });
         return;
       }
 
@@ -1041,7 +1049,6 @@ client.on("messageCreate", async (message) => {
             .setTitle('📝 How to Set Reading Point')
             .setDescription('**Usage:** `!setpoint <description>`')
             .addFields({ name: 'Examples', value: '`!setpoint Through Chapter 8`\n`!setpoint Page 150`' });
-        return message.reply({ embeds: [setPointHelpEmbed] });
         return;
       }
 
@@ -1111,7 +1118,6 @@ client.on("messageCreate", async (message) => {
           .setTitle('📊 How to Create a Rating Poll')
           .setDescription('**Usage:** `!poll <title>`')
           .addFields({ name: 'Example', value: '`!poll "How would you rate the last book?"`' })
-          .setFooter({ text: 'Polls last for 3 days unless manually ended with !endpoll' });
         return message.reply({ embeds: [pollHelpEmbed] });
       }
 
@@ -1157,6 +1163,8 @@ client.on("messageCreate", async (message) => {
           optionsData: newOptionsData, // Store the options with custom IDs
           votes: new Map(), // Initialize with empty votes
         });
+
+        try {
         await newPoll.save();
         console.log(`✅ [${currentCount}] Poll created and saved to DB: ${pollTitle}`);
 
@@ -1167,7 +1175,7 @@ client.on("messageCreate", async (message) => {
         await pollMessage.pin(); // Pin the poll message for visibility
 
         message.reply(`Poll "${pollTitle}" created and will end in 3 days!`);
-      } catch (error) {
+      } catch (error) { // This catch handles the try started at the beginning of the case
         console.error(`💥 [${currentCount}] Error creating or saving poll:`, error);
         message.reply("❌ Sorry, there was an error creating the poll.");
       }
@@ -1249,14 +1257,8 @@ client.on('interactionCreate', async interaction => {
       console.error(`Error processing poll vote for user ${interaction.user.tag}:`, error);
       await interaction.reply({ content: 'There was an error recording your vote. Please try again later.', ephemeral: true });
     }
-  }
-});
-
-    default:
-      console.log(`❓ [${currentCount}] Unknown command: ${command}`);
-      break;
-  }
-});
+  } // This closes the 'if (interaction.customId.startsWith('poll_'))' block
+}); // This closes the 'client.on('interactionCreate', ...)' block
 
 // ENHANCED ERROR HANDLING
 process.on("unhandledRejection", (error) => {
