@@ -20,6 +20,106 @@ const SettingsSchema = new mongoose.Schema({
   },
 });
 
+// Emojis and their corresponding star values for the poll
+const pollEmojis = [
+  "1️⃣", // 1.0
+  "1️⃣●5️⃣", // 1.5 (using sparkling star for half)
+  "2️⃣", // 2.0
+  "2️⃣●5️⃣", // 2.5
+  "3️⃣", // 3.0
+  "3️⃣●5️⃣", // 3.5
+  "4️⃣", // 4.0
+  "4️⃣●5️⃣", // 4.5
+  "5️⃣", // 5.0
+];
+
+const pollValues = [1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0];
+
+// Function to end a poll and calculate results
+async function endPoll(pollData) {
+  console.log(`Ending poll: ${pollData.title} (Message ID: ${pollData.messageId})`);
+  try {
+    const channel = await client.channels.fetch(pollData.channelId);
+    if (!channel) {
+      console.error(`Channel ${pollData.channelId} not found for poll ${pollData.messageId}`);
+      await Poll.deleteOne({ messageId: pollData.messageId });
+      return;
+    }
+
+    const message = await channel.messages.fetch(pollData.messageId);
+    if (!message) {
+      console.error(`Message ${pollData.messageId} not found in channel ${pollData.channelId}`);
+      await Poll.deleteOne({ messageId: pollData.messageId });
+      return;
+    }
+
+    const reactions = message.reactions.cache;
+    let totalScore = 0;
+    let totalVotes = 0;
+    const results = {};
+
+    for (let i = 0; i < pollEmojis.length; i++) {
+      const emoji = pollEmojis[i];
+      const value = pollValues[i];
+      const reaction = reactions.get(emoji);
+
+      if (reaction) {
+        // Fetch all users who reacted to avoid counting the bot's own reaction
+        const users = await reaction.users.fetch();
+        const userVotes = users.filter(user => !user.bot).size;
+        results[emoji] = userVotes;
+        totalScore += userVotes * value;
+        totalVotes += userVotes;
+      } else {
+        results[emoji] = 0;
+      }
+    }
+
+    let resultDescription = `**Poll: "${pollData.title}" has ended!**\n\n`;
+    for (let i = 0; i < pollEmojis.length; i++) {
+      const emoji = pollEmojis[i];
+      const value = pollValues[i];
+      const votes = results[emoji];
+      resultDescription += `${emoji} ${value.toFixed(1)} stars: ${votes} votes\n`;
+    }
+
+    if (totalVotes > 0) {
+      const averageRating = (totalScore / totalVotes).toFixed(2);
+      resultDescription += `\n**Average Rating: ${averageRating} / 5.0**`;
+    } else {
+      resultDescription += "\nNo votes were cast.";
+    }
+
+    const resultEmbed = new EmbedBuilder()
+      .setColor(0x3498DB) // Blue
+      .setTitle('📊 Poll Results')
+      .setDescription(resultDescription)
+      .setTimestamp();
+
+    await channel.send({ embeds: [resultEmbed] });
+    await message.unpin().catch(console.error); // Unpin the poll message
+    await Poll.deleteOne({ messageId: pollData.messageId }); // Remove from DB
+    console.log(`Poll results sent for ${pollData.title}`);
+  } catch (error) {
+    console.error(`Error ending poll ${pollData.messageId}:`, error);
+  }
+}
+
+// Function to load active polls from DB and set timers
+async function loadActivePolls() {
+  const activePolls = await Poll.find({});
+  for (const poll of activePolls) {
+    const now = DateTime.now().toJSDate();
+    if (poll.endTime <= now) {
+      await endPoll(poll);
+    } else {
+      const timeRemaining = poll.endTime.getTime() - now.getTime();
+      setTimeout(() => endPoll(poll), timeRemaining);
+      console.log(`Rescheduled poll "${poll.title}" to end in ${timeRemaining / (1000 * 60 * 60)} hours.`);
+    }
+  }
+}
+
 const PollSchema = new mongoose.Schema({
   messageId: { type: String, required: true },
   channelId: { type: String, required: true },
