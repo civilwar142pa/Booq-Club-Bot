@@ -1,5 +1,5 @@
-const { Client, ActivityType, EmbedBuilder, GatewayIntentBits } = require("discord.js");
-const express = require("express");
+const { Client, ActivityType, EmbedBuilder, GatewayIntentBits, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
+const express = require("express"); //
 const { getSheetData } = require("./sheets");
 const { DateTime } = require("luxon");
 const fetch = require("node-fetch");
@@ -21,19 +21,17 @@ const SettingsSchema = new mongoose.Schema({
 });
 
 // Emojis and their corresponding star values for the poll
-const pollEmojis = [
-  "1️⃣", // 1.0
-  "1️⃣●5️⃣", // 1.5 (using sparkling star for half)
-  "2️⃣", // 2.0
-  "2️⃣●5️⃣", // 2.5
-  "3️⃣", // 3.0
-  "3️⃣●5️⃣", // 3.5
-  "4️⃣", // 4.0
-  "4️⃣●5️⃣", // 4.5
-  "5️⃣", // 5.0
+const pollOptions = [
+  {label: "1 star", value: 1.0},
+  {label: "1.5 stars", value: 1.5},
+  {label: "2 stars", value: 2.0},
+  {label: "2.5 stars", value: 2.5},
+  {label: "3 stars", value: 3.0},
+  {label: "3.5 stars", value: 3.5},
+  {label: "4 stars", value: 4.0},
+  {label: "4.5 stars", value: 4.5},
+  {label: "5 stars", value: 5.0}
 ];
-
-const pollValues = [1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0];
 
 // Function to end a poll and calculate results
 async function endPoll(pollData) {
@@ -57,32 +55,25 @@ async function endPoll(pollData) {
     let totalScore = 0;
     let totalVotes = 0;
     const results = {};
+    
+    // Initialize resultsCount
+    pollOptions.forEach(option => {
+      results[option.label] = 0;
+    });
 
-    for (let i = 0; i < pollEmojis.length; i++) {
-      const emoji = pollEmojis[i];
-      const value = pollValues[i];
-      const reaction = reactions.get(emoji);
-
-      if (reaction) {
-        // Fetch all users who reacted to avoid counting the bot's own reaction
-        const users = await reaction.users.fetch();
-        const userVotes = users.filter(user => !user.bot).size;
-        results[emoji] = userVotes;
-        totalScore += userVotes * value;
-        totalVotes += userVotes;
-      } else {
-        results[emoji] = 0;
+    // Tally votes from the stored 'votes' map
+    for (const [userId, ratingValue] of pollData.votes.entries()) {
+      totalScore += ratingValue;
+      totalVotes++;
+      const optionLabel = pollOptions.find(opt => opt.value === ratingValue)?.label;
+      if (optionLabel) {
+        results[optionLabel]++;
       }
     }
-
     let resultDescription = `**Poll: "${pollData.title}" has ended!**\n\n`;
-    for (let i = 0; i < pollEmojis.length; i++) {
-      const emoji = pollEmojis[i];
-      const value = pollValues[i];
-      const votes = results[emoji];
-      resultDescription += `${emoji} ${value.toFixed(1)} stars: ${votes} votes\n`;
+    for (const option of pollOptions) {
+      resultDescription += `${option.label}: ${results[option.label] || 0} votes\n`;
     }
-
     if (totalVotes > 0) {
       const averageRating = (totalScore / totalVotes).toFixed(2);
       resultDescription += `\n**Average Rating: ${averageRating} / 5.0**`;
@@ -126,7 +117,12 @@ const PollSchema = new mongoose.Schema({
   guildId: { type: String, required: true },
   title: { type: String, required: true },
   endTime: { type: Date, required: true },
-  options: { type: Map, of: Number, required: true }, // Map of emoji (string) to rating value (number)
+  votes: { type: Map, of: Number, default: {} }, // New: userId to rating value
+  optionsData: [{ // New: structured options for buttons
+    label: String,
+    value: Number,
+    customId: String
+  }]
 });
 const Poll = mongoose.model("Poll", PollSchema);
 
@@ -1122,26 +1118,35 @@ client.on("messageCreate", async (message) => {
       const pollTitle = args.join(" ");
       const pollEndTime = DateTime.now().plus({ days: 3 }).toJSDate();
 
-      const pollOptionsDescription = pollEmojis.map((emoji, index) => `${emoji} = ${pollValues[index].toFixed(1)} stars`).join('\n');
+      const components = [];
+      const newOptionsData = []; // To store options with generated customIds
 
       const pollEmbed = new EmbedBuilder()
         .setColor(0x3498DB)
         .setTitle(`📊 Poll: ${pollTitle}`)
-        .setDescription(`Rate from 1.0 to 5.0 stars using the reactions below!\n\n${pollOptionsDescription}`)
+        .setDescription(`Rate from 1.0 to 5.0 stars using the buttons below!`)
         .addFields(
             { name: 'Duration', value: '3 days', inline: true },
             { name: 'Ends', value: `<t:${Math.floor(pollEndTime.getTime() / 1000)}:F>`, inline: true }
         )
-        .setFooter({ text: 'React to cast your vote!' })
         .setTimestamp();
 
-      try {
-        const pollMessage = await message.channel.send({ embeds: [pollEmbed] });
+      // buttons for each poll option
+      for (let i = 0; i < pollOptions.length; i += 5) { // Max 5 buttons per row
+        const row = new ActionRowBuilder();
+        const buttonsInRow = pollOptions.slice(i, i + 5).map(option => {
+          const customId = `poll_${Date.now()}_${option.value}`; // Unique ID for each button
+          newOptionsData.push({ ...option, customId }); // Store customId
+          return new ButtonBuilder()
+            .setCustomId(customId)
+            .setLabel(option.label)
+            .setStyle(ButtonStyle.Primary); // Blue button
+        });
+        row.addComponents(buttonsInRow);
+        components.push(row);
+      }
 
-        for (const emoji of pollEmojis) {
-          await pollMessage.react(emoji);
-        }
-
+        const pollMessage = await message.channel.send({ embeds: [pollEmbed], components: components });
         // Store poll data in MongoDB
         const newPoll = new Poll({
           messageId: pollMessage.id,
@@ -1149,7 +1154,8 @@ client.on("messageCreate", async (message) => {
           guildId: message.guild.id,
           title: pollTitle,
           endTime: pollEndTime,
-          options: new Map(pollEmojis.map((emoji, index) => [emoji, pollValues[index]])),
+          optionsData: newOptionsData, // Store the options with custom IDs
+          votes: new Map(), // Initialize with empty votes
         });
         await newPoll.save();
         console.log(`✅ [${currentCount}] Poll created and saved to DB: ${pollTitle}`);
@@ -1186,6 +1192,65 @@ client.on("messageCreate", async (message) => {
       }
       console.log(`🏁 [${currentCount}] !endpoll completed`);
       break;
+
+    default:
+      console.log(`❓ [${currentCount}] Unknown command: ${command}`);
+      break;
+  }
+});
+
+// INTERACTION HANDLER FOR POLL BUTTONS
+client.on('interactionCreate', async interaction => {
+  if (!interaction.isButton()) return;
+
+  // Check if the customId starts with 'poll_'
+  if (interaction.customId.startsWith('poll_')) {
+    const parts = interaction.customId.split('_');
+    if (parts.length !== 3) {
+      console.warn(`Invalid poll button customId format: ${interaction.customId}`);
+      return interaction.reply({ content: 'There was an error processing your vote. Please try again.', ephemeral: true });
+    }
+
+    const pollMessageId = interaction.message.id;
+    const ratingValue = parseFloat(parts[2]); // The rating value is the third part
+
+    try {
+      const poll = await Poll.findOne({ messageId: pollMessageId });
+
+      if (!poll) {
+        return interaction.reply({ content: 'This poll no longer exists or has ended.', ephemeral: true });
+      }
+
+      if (poll.endTime <= new Date()) {
+        return interaction.reply({ content: 'This poll has already ended.', ephemeral: true });
+      }
+
+      // Check if user has already voted
+      if (poll.votes.has(interaction.user.id)) {
+        const existingVote = poll.votes.get(interaction.user.id);
+        if (existingVote === ratingValue) {
+          return interaction.reply({ content: `You have already voted ${ratingValue} stars for this poll.`, ephemeral: true });
+        } else {
+          // User is changing their vote
+          poll.votes.set(interaction.user.id, ratingValue);
+          await poll.save();
+          return interaction.reply({ content: `Your vote has been changed to ${ratingValue} stars!`, ephemeral: true });
+        }
+      }
+
+      // Record the vote
+      poll.votes.set(interaction.user.id, ratingValue);
+      await poll.save();
+
+      await interaction.reply({ content: `You voted ${ratingValue} stars for "${poll.title}"!`, ephemeral: true });
+      console.log(`User ${interaction.user.tag} voted ${ratingValue} for poll ${poll.title}`);
+
+    } catch (error) {
+      console.error(`Error processing poll vote for user ${interaction.user.tag}:`, error);
+      await interaction.reply({ content: 'There was an error recording your vote. Please try again later.', ephemeral: true });
+    }
+  }
+});
 
     default:
       console.log(`❓ [${currentCount}] Unknown command: ${command}`);
