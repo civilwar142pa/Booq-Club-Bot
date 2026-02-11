@@ -218,7 +218,11 @@ async function initializeBot() {
     console.warn("⚠️ MONGODB_URI not set! Data will not persist on restart.");
   }
 
-  while (true) {
+  let retryCount = 0;
+  const maxLoginRetries = 10; // Maximum number of login attempts
+  const baseRetryDelayMs = 5000; // 5 seconds base delay
+
+  while (retryCount < maxLoginRetries) {
     try {
       console.log("🤖 Attempting to login to Discord...");
       const loginPromise = client.login(token);
@@ -229,9 +233,21 @@ async function initializeBot() {
       console.log("✅ Bot logged in successfully");
       break; // Exit loop on success
     } catch (error) {
-      console.error("❌ Login failed:", error.message);
-      console.log("🔄 Retrying in 30 seconds...");
-      await new Promise((resolve) => setTimeout(resolve, 30000));
+      retryCount++;
+      let errorMessage = `❌ Discord login failed (Attempt ${retryCount}/${maxLoginRetries}): ${error.message}`;
+      if (error.code) {
+        errorMessage += ` (Discord.js Error Code: ${error.code})`;
+      }
+      console.error(errorMessage);
+
+      if (retryCount < maxLoginRetries) {
+        const delay = baseRetryDelayMs * Math.pow(2, retryCount - 1); // Exponential backoff
+        console.log(`🔄 Retrying in ${delay / 1000} seconds...`);
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      } else {
+        console.error("🔴 Max Discord login retries reached. Exiting process.");
+        process.exit(1); // Exit if max retries reached
+      }
     }
   }
 }
