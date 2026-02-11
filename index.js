@@ -20,6 +20,16 @@ const SettingsSchema = new mongoose.Schema({
   },
 });
 
+const PollSchema = new mongoose.Schema({
+  messageId: { type: String, required: true },
+  channelId: { type: String, required: true },
+  guildId: { type: String, required: true },
+  title: { type: String, required: true },
+  endTime: { type: Date, required: true },
+  options: { type: Map, of: Number, required: true }, // Map of emoji (string) to rating value (number)
+});
+const Poll = mongoose.model("Poll", PollSchema);
+
 const Settings = mongoose.model("Settings", SettingsSchema);
 
 // Initialize default state (will be overwritten by DB load)
@@ -31,6 +41,7 @@ let storage = {
     eventId: null,
     isoDate: null,
   },
+  activePolls: [], // To store active poll data
 };
 let currentPoint = storage.readingPoint;
 let meetingInfo = storage.meetingInfo;
@@ -210,6 +221,7 @@ async function initializeBot() {
         currentPoint = storage.readingPoint;
         meetingInfo = storage.meetingInfo || meetingInfo;
         console.log("📥 Loaded data from database");
+      await loadActivePolls(); // Load and reschedule active polls
       }
     } catch (error) {
       console.error("❌ MongoDB Connection Error:", error);
@@ -561,7 +573,7 @@ client.on("messageCreate", async (message) => {
         .setTitle('🤖 Booq Club Commands')
         .addFields(
           { name: '📚 Reading', value: '`!reading` - Current book\n`!currentpoint` - Reading goal\n`!pastreads` - Past books list\n`!random` - Pick random future option' },
-          { name: '📅 Meetings', value: '`!nextmeeting` - Meeting info\n`!setmeeting` - Schedule meeting\n`!clearevent` - Cancel meeting' },
+          { name: '📅 Meetings & Polls', value: '`!nextmeeting` - Meeting info\n`!setmeeting` - Schedule meeting\n`!clearevent` - Cancel meeting\n`!poll <title>` - Create a rating poll\n`!endpoll` - Manually end active poll' },
           { name: '⚙️ Utility', value: '`!setpoint` - Set reading goal\n`!clearpoint` - Clear reading goal\n`!link` - Spreadsheet link\n`!timehelp` - Date format help\n`!status` - Bot health' }
         )
         .setFooter({ text: 'Booq Club Bot' });
@@ -992,6 +1004,87 @@ client.on("messageCreate", async (message) => {
             );
       message.reply({ embeds: [timeHelpEmbed] });
       console.log(`🏁 [${currentCount}] !timehelp completed`);
+      break;
+
+    case "poll":
+      console.log(`📊 [${currentCount}] Processing !poll`);
+      if (args.length === 0) {
+        console.log(`ℹ️ [${currentCount}] Showing poll help`);
+        const pollHelpEmbed = new EmbedBuilder()
+          .setColor(0x0099FF)
+          .setTitle('📊 How to Create a Rating Poll')
+          .setDescription('**Usage:** `!poll <title>`')
+          .addFields({ name: 'Example', value: '`!poll "How would you rate the last book?"`' })
+          .setFooter({ text: 'Polls last for 3 days unless manually ended with !endpoll' });
+        return message.reply({ embeds: [pollHelpEmbed] });
+      }
+
+      const pollTitle = args.join(" ");
+      const pollEndTime = DateTime.now().plus({ days: 3 }).toJSDate();
+
+      const pollOptionsDescription = pollEmojis.map((emoji, index) => `${emoji} = ${pollValues[index].toFixed(1)} stars`).join('\n');
+
+      const pollEmbed = new EmbedBuilder()
+        .setColor(0x3498DB)
+        .setTitle(`📊 Poll: ${pollTitle}`)
+        .setDescription(`Rate from 1.0 to 5.0 stars using the reactions below!\n\n${pollOptionsDescription}`)
+        .addFields(
+            { name: 'Duration', value: '3 days', inline: true },
+            { name: 'Ends', value: `<t:${Math.floor(pollEndTime.getTime() / 1000)}:F>`, inline: true }
+        )
+        .setFooter({ text: 'React to cast your vote!' })
+        .setTimestamp();
+
+      try {
+        const pollMessage = await message.channel.send({ embeds: [pollEmbed] });
+
+        for (const emoji of pollEmojis) {
+          await pollMessage.react(emoji);
+        }
+
+        // Store poll data in MongoDB
+        const newPoll = new Poll({
+          messageId: pollMessage.id,
+          channelId: pollMessage.channel.id,
+          guildId: message.guild.id,
+          title: pollTitle,
+          endTime: pollEndTime,
+          options: new Map(pollEmojis.map((emoji, index) => [emoji, pollValues[index]])),
+        });
+        await newPoll.save();
+        console.log(`✅ [${currentCount}] Poll created and saved to DB: ${pollTitle}`);
+
+        // Schedule poll end
+        const timeRemaining = pollEndTime.getTime() - Date.now();
+        setTimeout(() => endPoll(newPoll), timeRemaining);
+
+        await pollMessage.pin(); // Pin the poll message for visibility
+
+        message.reply(`Poll "${pollTitle}" created and will end in 3 days!`);
+      } catch (error) {
+        console.error(`💥 [${currentCount}] Error creating or saving poll:`, error);
+        message.reply("❌ Sorry, there was an error creating the poll.");
+      }
+      console.log(`🏁 [${currentCount}] !poll completed`);
+      break;
+
+    case "endpoll":
+      console.log(`🛑 [${currentCount}] Processing !endpoll`);
+      try {
+        const activePoll = await Poll.findOne({ channelId: message.channel.id });
+
+        if (!activePoll) {
+          console.log(`❌ [${currentCount}] No active poll found in this channel`);
+          return message.reply("❌ No active poll found in this channel.");
+        }
+
+        await endPoll(activePoll); // Call the function to end the poll
+        message.reply(`✅ Poll "${activePoll.title}" has been manually ended.`);
+      } catch (error) {
+        console.error(`💥 [${currentCount}] Error ending poll:`, error);
+        message.reply("❌ Sorry, there was an error ending the poll.");
+      }
+      console.log(`🏁 [${currentCount}] !endpoll completed`);
       break;
 
     default:
