@@ -62,9 +62,21 @@ async function endPoll(pollData) {
     });
 
     // Tally votes from the stored 'votes' map
+    const votesMap = pollData.votes instanceof Map ? pollData.votes : new Map(Object.entries(pollData.votes));
+    const voterNames = []; // hold names
+
     for (const [userId, ratingValue] of pollData.votes.entries()) {
       totalScore += ratingValue;
       totalVotes++;
+
+      //get username for the voter list
+      try {
+        const user = await client.users.fetch(userId);
+        voterNames.push(user.username);
+      } catch (e) {
+        voterNames.push("Unknown User");
+      }
+      
       const optionLabel = pollOptions.find(opt => opt.value === ratingValue)?.label;
       if (optionLabel) {
         results[optionLabel]++;
@@ -105,7 +117,7 @@ async function loadActivePolls() {
       console.warn('⚠️ Skipping corrupted poll ${poll.messageId} - missing endTime');
       continue;
     }
-    
+
     const now = DateTime.now().toJSDate();
     if (poll.endTime <= now) {
       await endPoll(poll);
