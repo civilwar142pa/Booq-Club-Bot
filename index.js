@@ -64,7 +64,6 @@ async function endPoll(pollIdentifier) {
       return;
     }
 
-    const reactions = message.reactions.cache;
     let totalScore = 0;
     let totalVotes = 0;
     const results = {};
@@ -1203,7 +1202,7 @@ client.on("messageCreate", async (message) => {
 
         // Schedule poll end
         const timeRemaining = pollEndTime.getTime() - Date.now();
-        setTimeout(() => endPoll(newPoll), timeRemaining);
+        setTimeout(() => endPoll(newPoll.messageId), timeRemaining);
 
         await pollMessage.pin(); // Pin the poll message for visibility
 
