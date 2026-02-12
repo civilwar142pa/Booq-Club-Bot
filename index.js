@@ -76,7 +76,7 @@ async function endPoll(pollData) {
       } catch (e) {
         voterNames.push("Unknown User");
       }
-      
+
       const optionLabel = pollOptions.find(opt => opt.value === ratingValue)?.label;
       if (optionLabel) {
         results[optionLabel]++;
@@ -86,9 +86,11 @@ async function endPoll(pollData) {
     for (const option of pollOptions) {
       resultDescription += `${option.label}: ${results[option.label] || 0} votes\n`;
     }
+
     if (totalVotes > 0) {
       const averageRating = (totalScore / totalVotes).toFixed(2);
       resultDescription += `\n**Average Rating: ${averageRating} / 5.0**`;
+      resultDescription += '\nVoters:** ${voterNames.join(", ")}'; //show voter list
     } else {
       resultDescription += "\nNo votes were cast.";
     }
