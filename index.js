@@ -90,7 +90,7 @@ async function endPoll(pollData) {
     if (totalVotes > 0) {
       const averageRating = (totalScore / totalVotes).toFixed(2);
       resultDescription += `\n**Average Rating: ${averageRating} / 5.0**`;
-      resultDescription += '\nVoters:** ${voterNames.join(", ")}'; //show voter list
+      resultDescription += `\nVoters:** ${voterNames.join(", ")}`; //show voter list
     } else {
       resultDescription += "\nNo votes were cast.";
     }
@@ -1257,27 +1257,18 @@ client.on("messageCreate", async (message) => {
       break;
 
     case "endpoll":
-      for (const [userId, ratingValue] of pollData.votes.entries()) {
-        if (typeof ratingValue == 'number') { //ensure valid number
-          totalScore += ratingValue;
-          totalVotes++;
-          const optionLabel = pollOptions.find(opt => opt.value === ratingValue)?.label;
-          if (optionLabel) {
-            results[optionLabel]++
-          }
-        }
-      }
-
       console.log(`🛑 [${currentCount}] Processing !endpoll`);
       try {
-        const activePoll = await Poll.findOne({ channelId: message.channel.id });
+        // Find the most recent poll in this channel
+        const activePoll = await Poll.findOne({ channelId: message.channel.id }).sort({ _id: -1 });
 
         if (!activePoll) {
           console.log(`❌ [${currentCount}] No active poll found in this channel`);
           return message.reply("❌ No active poll found in this channel.");
         }
 
-        await endPoll(activePoll); // Call the function to end the poll
+        // The math logic is inside this function already, so we just call it!
+        await endPoll(activePoll); 
         message.reply(`✅ Poll "${activePoll.title}" has been manually ended.`);
       } catch (error) {
         console.error(`💥 [${currentCount}] Error ending poll:`, error);
