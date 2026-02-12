@@ -34,9 +34,22 @@ const pollOptions = [
 ];
 
 // Function to end a poll and calculate results
-async function endPoll(pollData) {
-  console.log(`Ending poll: ${pollData.title} (Message ID: ${pollData.messageId})`);
+async function endPoll(pollIdentifier) {
   try {
+    let pollData;
+    if (typeof pollIdentifier === 'string') {
+      pollData = await Poll.findOne({ messageId: pollIdentifier });
+    } else {
+      pollData = pollIdentifier;
+    }
+
+    if (!pollData) {
+      console.error(`Poll data not found for identifier: ${pollIdentifier}`);
+      return;
+    }
+
+    console.log(`Ending poll: ${pollData.title} (Message ID: ${pollData.messageId})`);
+    
     const channel = await client.channels.fetch(pollData.channelId);
     if (!channel) {
       console.error(`Channel ${pollData.channelId} not found for poll ${pollData.messageId}`);
@@ -106,7 +119,7 @@ async function endPoll(pollData) {
     await Poll.deleteOne({ messageId: pollData.messageId }); // Remove from DB
     console.log(`Poll results sent for ${pollData.title}`);
   } catch (error) {
-    console.error(`Error ending poll ${pollData.messageId}:`, error);
+    console.error(`Error ending poll ${pollIdentifier}:`, error);
   }
 }
 
@@ -122,10 +135,10 @@ async function loadActivePolls() {
 
     const now = DateTime.now().toJSDate();
     if (poll.endTime <= now) {
-      await endPoll(poll);
+      await endPoll(poll.messageId);
     } else {
       const timeRemaining = poll.endTime.getTime() - now.getTime();
-      setTimeout(() => endPoll(poll), timeRemaining);
+      setTimeout(() => endPoll(poll.messageId), timeRemaining);
       console.log(`Rescheduled poll "${poll.title}" to end in ${timeRemaining / (1000 * 60 * 60)} hours.`);
     }
   }
@@ -1247,7 +1260,7 @@ client.on("messageCreate", async (message) => {
         await testPollEntry.save();
         
         // Schedule the immediate end
-        setTimeout(() => endPoll(testPollEntry), 60000);
+        setTimeout(() => endPoll(testPollEntry.messageId), 60000);
         
         message.reply("🧪 Test poll started! It will end in 60 seconds.");
       } catch (error) {
@@ -1268,7 +1281,7 @@ client.on("messageCreate", async (message) => {
         }
 
         // The math logic is inside this function already, so we just call it!
-        await endPoll(activePoll); 
+        await endPoll(activePoll.messageId); 
         message.reply(`✅ Poll "${activePoll.title}" has been manually ended.`);
       } catch (error) {
         console.error(`💥 [${currentCount}] Error ending poll:`, error);
