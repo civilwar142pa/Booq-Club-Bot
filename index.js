@@ -100,6 +100,12 @@ async function endPoll(pollData) {
 async function loadActivePolls() {
   const activePolls = await Poll.find({});
   for (const poll of activePolls) {
+    //check for corrupted poll data
+    if (!poll.endTimr || typeof poll.endTime.getTime !== 'function') {
+      console.warn('⚠️ Skipping corrupted poll ${poll.messageId} - missing endTime');
+      continue;
+    }
+    
     const now = DateTime.now().toJSDate();
     if (poll.endTime <= now) {
       await endPoll(poll);
