@@ -3,6 +3,13 @@ const express = require("express"); //
 const { getSheetData } = require("./sheets");
 const { DateTime } = require("luxon");
 const fetch = require("node-fetch");
+
+const token = process.env.DISCORD_BOT_TOKEN;
+
+if (!token) {
+  console.error("❌ Error: DISCORD_BOT_TOKEN is not set!");
+  process.exit(1);
+}
 const mongoose = require("mongoose");
 
 // Generate a unique Session ID to identify this specific process
@@ -1173,8 +1180,8 @@ client.on("messageCreate", async (message) => {
         .setColor(0x3498DB)
         .setTitle(`📊 Poll: ${pollTitle}`)
         .setDescription(`Rate from 1.0 to 5.0 stars using the buttons below!`)
-        .addFields( // Changed from 3 days to 1 day
-            { name: 'Duration', value: '3 days', inline: true },
+        .addFields(
+            { name: 'Duration', value: '1 day', inline: true },
             { name: 'Ends', value: `<t:${Math.floor(pollEndTime.getTime() / 1000)}:F>`, inline: true }
         )
         .setTimestamp();
@@ -1361,11 +1368,14 @@ client.on('interactionCreate', async interaction => {
 // ENHANCED ERROR HANDLING
 process.on("unhandledRejection", (error) => {
   console.error("🔴 Unhandled Promise Rejection:", error);
+  // Exit immediately for unhandled rejections to ensure log is flushed and process doesn't hang
+  process.exit(1);
 });
 
 process.on("uncaughtException", (error) => {
   console.error("🔴 Uncaught Exception:", error);
-  console.log("🔄 Restarting in 10 seconds...");
+  // Removed misleading "Restarting in 10 seconds..." message
+  // as process.exit(1) is called immediately.
   uptimeMonitor.stopHeartbeats();
   process.exit(1); // Exit immediately to ensure log is flushed
 });
@@ -1400,13 +1410,6 @@ const gracefulShutdown = async (signal) => {
 
 process.on("SIGINT", () => gracefulShutdown("SIGINT"));
 process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
-
-const token = process.env.DISCORD_BOT_TOKEN;
-
-if (!token) {
-  console.error("❌ Error: DISCORD_BOT_TOKEN is not set!");
-  process.exit(1);
-}
 
 // Start the bot
 initializeBot();
