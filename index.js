@@ -365,7 +365,9 @@ async function initializeBot() {
   while (retryCount < maxLoginRetries) {
     try {
       console.log("🤖 Attempting to login to Discord...");
+      console.log("⏳ Initializing Discord.js login promise...");
       const loginPromise = client.login(token);
+      console.log("⏱️ Setting up 60-second login timeout...");
       const timeoutPromise = new Promise((resolve, reject) =>
         setTimeout(() => {
           console.error("⏰ Discord login timeout of 60 seconds reached. Exiting process.");
@@ -373,6 +375,7 @@ async function initializeBot() {
           process.exit(1); // Force exit to ensure log is flushed and process doesn't hang
         }, 60000)
       );
+      console.log("🏁 Waiting for Discord login or timeout...");
       await Promise.race([loginPromise, timeoutPromise]);
       console.log("✅ Bot logged in successfully");
       break; // Exit loop on success
