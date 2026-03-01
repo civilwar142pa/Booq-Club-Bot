@@ -134,8 +134,9 @@ async function loadActivePolls() {
   const activePolls = await Poll.find({});
   for (const poll of activePolls) {
     //check for corrupted poll data
-    if (!poll.endTime || typeof poll.endTime.getTime !== 'function') {
-      console.warn('⚠️ Skipping corrupted poll ${poll.messageId} - missing endTime');
+    if (!poll.endTime || !(poll.endTime instanceof Date) || isNaN(poll.endTime.getTime())) {
+      console.warn(`⚠️ Skipping and deleting corrupted poll ${poll.messageId} - missing or invalid endTime`);
+      await Poll.deleteOne({ messageId: poll.messageId }); // Delete corrupted poll
       continue;
     }
 
@@ -417,7 +418,7 @@ async function initializeBot() {
   }
 }
 
-client.once("ready", () => {
+client.once("clientReady", () => { // Updated from 'ready' to 'clientReady'
   console.log(`✅ Logged in as ${client.user.tag}!`);
   console.log(`📊 Bot is in ${client.guilds.cache.size} server(s)`);
   console.log(`🆔 Session ID: ${SESSION_ID}`);
