@@ -1230,9 +1230,14 @@ client.on("messageCreate", async (message) => {
         const timeRemaining = pollEndTime.getTime() - Date.now();
         setTimeout(() => endPoll(newPoll.messageId), timeRemaining);
 
-        await pollMessage.pin();
+        try {
+          await pollMessage.pin();
+        } catch (pinError) {
+          console.warn(`⚠️ [${currentCount}] Failed to pin poll message ${pollMessage.id}:`, pinError.message);
+          // Continue execution even if pinning fails
+        }
 
-        message.reply(`Poll "${pollTitle}" created and will end in 3 days!`);
+        message.reply(`Poll "${pollTitle}" created and will end in 1 day!`);
       } catch (error) { // This catch handles the try started at the beginning of the case
         console.error(`💥 [${currentCount}] Error creating or saving poll:`, error);
         message.reply("❌ Sorry, there was an error creating the poll.");
