@@ -333,6 +333,13 @@ const client = new Client({
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.GuildScheduledEvents,
   ],
+  // Enable WebSocket debugging for more detailed connection logs
+  ws: {
+    properties: { $browser: 'Discord iOS' }, // Mimic a mobile client to potentially bypass some server-side checks if any
+    version: 9, // Use WebSocket protocol version 9
+    compress: true, // Enable WebSocket compression
+    debug: true, // Enable debug logging for WebSocket events
+  },
 });
 
 const PREFIX = "!";
@@ -371,6 +378,7 @@ async function initializeBot() {
 
   while (retryCount < maxLoginRetries) {
     try {
+      console.log(`   DEBUG environment variable: ${process.env.DEBUG}`); // Added to check if DEBUG is set
       console.log(`   Discord Bot Token status: ${token ? 'present' : 'missing'}`); // Log if token is present, not the token itself
       console.log("🤖 Attempting to login to Discord...");
       console.log("⏳ Initializing Discord.js login promise...");
