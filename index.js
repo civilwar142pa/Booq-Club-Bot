@@ -364,10 +364,10 @@ async function initializeBot() {
 
   while (retryCount < maxLoginRetries) {
     try {
+      console.log(`   Discord Bot Token status: ${token ? 'present' : 'missing'}`); // Log if token is present, not the token itself
       console.log("🤖 Attempting to login to Discord...");
       console.log("⏳ Initializing Discord.js login promise...");
       const loginPromise = client.login(token);
-      console.log("➡️ client.login(token) called, awaiting promise resolution...");
       console.log("⏱️ Setting up 60-second login timeout...");
       const timeoutPromise = new Promise((resolve, reject) =>
         setTimeout(() => {
