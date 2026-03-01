@@ -393,8 +393,8 @@ async function initializeBot() {
           process.stderr.write("⏰ [FATAL] Discord login timed out. Forcing exit.\n");
           reject(new Error("Discord login timed out after 60 seconds"));
           process.exit(1); // Force exit to ensure log is flushed and process doesn't hang
-        }, 60000));
-      );
+        }, 60000); // Correctly close setTimeout
+      }); // Correctly close new Promise
       console.log("🏁 Waiting for Discord login or timeout...");
       await Promise.race([loginPromise, timeoutPromise]);
       clearTimeout(loginTimeoutId); // Clear the timeout if login is successful
