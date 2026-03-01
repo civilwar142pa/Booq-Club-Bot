@@ -367,6 +367,7 @@ async function initializeBot() {
       console.log("🤖 Attempting to login to Discord...");
       console.log("⏳ Initializing Discord.js login promise...");
       const loginPromise = client.login(token);
+      console.log("➡️ client.login(token) called, awaiting promise resolution...");
       console.log("⏱️ Setting up 60-second login timeout...");
       const timeoutPromise = new Promise((resolve, reject) =>
         setTimeout(() => {
@@ -1366,7 +1367,7 @@ process.on("uncaughtException", (error) => {
   console.error("🔴 Uncaught Exception:", error);
   console.log("🔄 Restarting in 10 seconds...");
   uptimeMonitor.stopHeartbeats();
-  setTimeout(() => process.exit(1), 10000);
+  process.exit(1); // Exit immediately to ensure log is flushed
 });
 
 client.on("disconnect", () => {
