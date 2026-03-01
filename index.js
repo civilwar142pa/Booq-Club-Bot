@@ -1154,7 +1154,7 @@ client.on("messageCreate", async (message) => {
       }
 
       const pollTitle = args.join(" ");
-      const pollEndTime = DateTime.now().plus({ days: 3 }).toJSDate();
+      const pollEndTime = DateTime.now().plus({ days: 1 }).toJSDate();
 
       const components = [];
       const newOptionsData = []; // To store options with generated customIds
@@ -1163,7 +1163,7 @@ client.on("messageCreate", async (message) => {
         .setColor(0x3498DB)
         .setTitle(`📊 Poll: ${pollTitle}`)
         .setDescription(`Rate from 1.0 to 5.0 stars using the buttons below!`)
-        .addFields(
+        .addFields( // Changed from 3 days to 1 day
             { name: 'Duration', value: '3 days', inline: true },
             { name: 'Ends', value: `<t:${Math.floor(pollEndTime.getTime() / 1000)}:F>`, inline: true }
         )
@@ -1204,7 +1204,7 @@ client.on("messageCreate", async (message) => {
         const timeRemaining = pollEndTime.getTime() - Date.now();
         setTimeout(() => endPoll(newPoll.messageId), timeRemaining);
 
-        await pollMessage.pin(); // Pin the poll message for visibility
+        await pollMessage.pin();
 
         message.reply(`Poll "${pollTitle}" created and will end in 3 days!`);
       } catch (error) { // This catch handles the try started at the beginning of the case
