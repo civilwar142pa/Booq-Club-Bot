@@ -367,7 +367,11 @@ async function initializeBot() {
       console.log("🤖 Attempting to login to Discord...");
       const loginPromise = client.login(token);
       const timeoutPromise = new Promise((resolve, reject) =>
-        setTimeout(() => reject(new Error("Discord login timed out after 60 seconds")), 60000)
+        setTimeout(() => {
+          console.error("⏰ Discord login timeout of 60 seconds reached. Exiting process.");
+          reject(new Error("Discord login timed out after 60 seconds"));
+          process.exit(1); // Force exit to ensure log is flushed and process doesn't hang
+        }, 60000)
       );
       await Promise.race([loginPromise, timeoutPromise]);
       console.log("✅ Bot logged in successfully");
