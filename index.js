@@ -378,18 +378,6 @@ async function initializeBot() {
 
   while (retryCount < maxLoginRetries) {
     try {
-      // Network connectivity test before Discord login
-      try {
-        console.log("🌐 Testing network connectivity to Discord gateway...");
-        const gatewayResponse = await fetch('https://gateway.discord.gg/v10/gateway');
-        if (gatewayResponse.ok) {
-            console.log("✅ Successfully reached Discord gateway endpoint.");
-        } else {
-            console.error(`❌ Failed to reach Discord gateway endpoint: HTTP ${gatewayResponse.status}`);
-        }
-      } catch (networkError) {
-        console.error(`❌ Network connectivity test to Discord gateway failed: ${networkError.message}`);
-      }
       console.log(`   DEBUG environment variable: ${process.env.DEBUG}`); // Added to check if DEBUG is set
       console.log(`   Discord Bot Token status: ${token ? 'present' : 'missing'}`); // Log if token is present, not the token itself
       console.log("🤖 Attempting to login to Discord...");
