@@ -379,14 +379,15 @@ async function initializeBot() {
 
   while (retryCount < maxLoginRetries) {
     try {
+      let loginTimeoutId; // Declare a variable to hold the timeout ID
       console.log(`   DEBUG environment variable: ${process.env.DEBUG}`); // Added to check if DEBUG is set
       console.log(`   Discord Bot Token status: ${token ? 'present' : 'missing'}`); // Log if token is present, not the token itself
       console.log("🤖 Attempting to login to Discord...");
       console.log("⏳ Initializing Discord.js login promise...");
       const loginPromise = client.login(token);
       console.log("⏱️ Setting up 60-second login timeout...");
-      const timeoutPromise = new Promise((resolve, reject) =>
-        setTimeout(() => {
+      const timeoutPromise = new Promise((resolve, reject) => {
+        loginTimeoutId = setTimeout(() => { // Assign the timeout ID
           console.error("⏰ Discord login timeout of 60 seconds reached. Exiting process.");
           // Attempt a synchronous write to stderr to ensure it's logged immediately
           process.stderr.write("⏰ [FATAL] Discord login timed out. Forcing exit.\n");
@@ -396,9 +397,11 @@ async function initializeBot() {
       );
       console.log("🏁 Waiting for Discord login or timeout...");
       await Promise.race([loginPromise, timeoutPromise]);
+      clearTimeout(loginTimeoutId); // Clear the timeout if login is successful
       console.log("✅ Bot logged in successfully");
       break; // Exit loop on success
     } catch (error) {
+      clearTimeout(loginTimeoutId); // Also clear timeout if login fails for other reasons
       retryCount++;
       let errorMessage = `❌ Discord login failed (Attempt ${retryCount}/${maxLoginRetries}): ${error.message}`;
       if (error.code) {
