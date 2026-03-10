@@ -6,6 +6,9 @@
   "scripts": {
     "start": "node index.js"
   },
+  "devDependencies": {
+    "dotenv": "^16.4.5"
+  },
   "dependencies": {
     "discord.js": "^14.25.1",
     "express": "^4.18.2",

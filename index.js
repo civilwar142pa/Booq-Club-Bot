@@ -82,25 +82,37 @@ async function endPoll(pollIdentifier) {
 
     // Tally votes from the stored 'votes' map
     const votesMap = pollData.votes instanceof Map ? pollData.votes : new Map(Object.entries(pollData.votes));
-    const voterNames = []; // hold names
+    const voterNames = [];
+    const guild = client.guilds.cache.get(pollData.guildId);
+    const membersToFetch = Array.from(votesMap.keys());
+    let fetchedMembers = new Map();
+    if (guild) {
+      // Fetch all members in one go if possible, or from cache
+      fetchedMembers = await guild.members.fetch({ user: membersToFetch, force: false }).catch(() => new Map());
+    }
 
-    for (const [userId, ratingValue] of pollData.votes.entries()) {
+    for (const [userId, ratingValue] of pollData.votes.entries()) { // Line 74
       totalScore += ratingValue;
       totalVotes++;
 
-      //get username for the voter list
-      try {
-        const user = await client.users.fetch(userId);
-        voterNames.push(user.username);
-      } catch (e) {
-        voterNames.push("Unknown User");
+      const member = fetchedMembers.get(userId);
+      if (member) {
+        voterNames.push(member.user.username);
+      } else {
+        // Fallback if member not found (e.g., left guild, or cache miss)
+        try {
+          const user = await client.users.fetch(userId);
+          voterNames.push(user.username);
+        } catch (e) {
+          voterNames.push("Unknown User");
+        }
       }
 
       const optionLabel = pollOptions.find(opt => opt.value === ratingValue)?.label;
       if (optionLabel) {
         results[optionLabel]++;
       }
-    }
+    } // Correct closing brace for the for loop
     let resultDescription = `**Poll: "${pollData.title}" has ended!**\n\n`;
     for (const option of pollOptions) {
       resultDescription += `${option.label}: ${results[option.label] || 0} votes\n`;
