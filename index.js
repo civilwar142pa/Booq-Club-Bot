@@ -425,7 +425,7 @@ async function initializeBot() {
   // 1. Connect to MongoDB
   if (process.env.MONGODB_URI) {
     try {
-      console.log(`🍃 Connecting to MongoDB using URI: ${process.env.MONGODB_URI.replace(/(\/\/.*?@.*?\/)(.*?(\?|$))/g, '$1<DB_NAME>$2')}`); // Mask sensitive parts for logging
+      console.log(`🍃 Connecting to MongoDB using URI: ${process.env.MONGODB_URI.replace(/\/\/([^:]+):([^@]+)@/, '//***:***@')}`); // Mask sensitive parts for logging
       await mongoose.connect(process.env.MONGODB_URI);
       console.log("✅ Connected to MongoDB");
 
