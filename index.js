@@ -1,10 +1,12 @@
 const { Client, ActivityType, EmbedBuilder, GatewayIntentBits, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
+const dns = require("node:dns");
+dns.setDefaultResultOrder("ipv4first"); // Fixes Node.js 18+ DNS IPv6 resolution hangs
 const express = require("express"); //
 const { getSheetData } = require("./sheets");
 const { DateTime } = require("luxon");
 const fetch = require("node-fetch");
 
-const token = process.env.DISCORD_BOT_TOKEN;
+const token = process.env.DISCORD_BOT_TOKEN?.trim();
 
 if (!token) {
   console.error("❌ Error: DISCORD_BOT_TOKEN is not set!");
