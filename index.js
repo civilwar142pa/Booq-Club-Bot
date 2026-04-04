@@ -1,6 +1,6 @@
-const { Client, ActivityType, EmbedBuilder, GatewayIntentBits, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
 const dns = require("node:dns");
 dns.setDefaultResultOrder("ipv4first"); // Fixes Node.js 18+ DNS IPv6 resolution hangs
+const { Client, ActivityType, EmbedBuilder, GatewayIntentBits, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
 const express = require("express"); //
 const { getSheetData } = require("./sheets");
 const { DateTime } = require("luxon");
@@ -413,6 +413,8 @@ const client = new Client({
 // Add debug and warn listeners to track down the silent login hang
 client.on("debug", console.log);
 client.on("warn", console.warn);
+client.rest.on("restDebug", console.log);
+client.rest.on("rateLimited", console.warn);
 
 const PREFIX = "!";
 
