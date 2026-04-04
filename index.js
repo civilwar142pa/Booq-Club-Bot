@@ -24,6 +24,8 @@ const SettingsSchema = new mongoose.Schema({
     time: String,
     eventId: String,
     isoDate: String,
+    channelId: String,
+    reminderSent: { type: Boolean, default: false },
   },
 });
 
@@ -163,6 +165,62 @@ async function loadActivePolls() {
   }
 }
 
+let meetingReminderTimeout = null;
+
+async function sendMeetingReminder() {
+  if (!meetingInfo || !meetingInfo.channelId) return;
+
+  try {
+    const channel = await client.channels.fetch(meetingInfo.channelId);
+    if (channel) {
+      const formattedDate = formatMeetingDate(meetingInfo.isoDate);
+      const reminderEmbed = new EmbedBuilder()
+        .setColor(0xF1C40F)
+        .setTitle('⏰ Book Club Meeting Reminder!')
+        .setDescription(`Our next meeting is in **2 days** on **${formattedDate}**!\n\nRead now or else!`)
+        .setTimestamp();
+      
+      await channel.send({ content: '@everyone', embeds: [reminderEmbed] });
+      console.log(`✅ Sent 2-day meeting reminder in channel ${channel.name}`);
+      
+      meetingInfo.reminderSent = true;
+      storage.meetingInfo = meetingInfo;
+      await saveStorage(storage);
+    }
+  } catch (error) {
+    console.error('❌ Failed to send meeting reminder:', error);
+  }
+}
+
+function scheduleMeetingReminder() {
+  if (meetingReminderTimeout) {
+    clearTimeout(meetingReminderTimeout);
+    meetingReminderTimeout = null;
+  }
+
+  if (!meetingInfo || !meetingInfo.isoDate || meetingInfo.reminderSent) {
+    return;
+  }
+
+  const meetingTime = DateTime.fromISO(meetingInfo.isoDate).toJSDate().getTime();
+  const reminderTime = meetingTime - (2 * 24 * 60 * 60 * 1000); // 2 days before
+  const now = Date.now();
+
+  if (reminderTime > now) {
+    const timeUntilReminder = reminderTime - now;
+    // setTimeout has a maximum delay of 2147483647 ms (approx 24.8 days)
+    if (timeUntilReminder > 2147483647) {
+      meetingReminderTimeout = setTimeout(scheduleMeetingReminder, 2147483647);
+    } else {
+      meetingReminderTimeout = setTimeout(sendMeetingReminder, timeUntilReminder);
+      console.log(`⏰ Rescheduled meeting reminder to send in ${(timeUntilReminder / (1000 * 60 * 60)).toFixed(2)} hours.`);
+    }
+  } else if (meetingTime > now && !meetingInfo.reminderSent) {
+    // The reminder time has passed, but the meeting hasn't happened yet.
+    sendMeetingReminder();
+  }
+}
+
 const PollSchema = new mongoose.Schema({
   messageId: { type: String, required: true },
   channelId: { type: String, required: true },
@@ -188,6 +246,8 @@ let storage = {
     time: null,
     eventId: null,
     isoDate: null,
+    channelId: null,
+    reminderSent: false,
   },
   activePolls: [], // To store active poll data
 };
@@ -377,6 +437,7 @@ async function initializeBot() {
         meetingInfo = storage.meetingInfo || meetingInfo;
         console.log("📥 Loaded data from database");
       await loadActivePolls(); // Load and reschedule active polls
+      scheduleMeetingReminder();
       }
     } catch (error) {
       console.error("❌ MongoDB Connection Error:", error);
@@ -1001,6 +1062,8 @@ client.on("messageCreate", async (message) => {
         meetingInfo.date = parsedDate.toLocaleString(DateTime.DATE_FULL);
         meetingInfo.time = parsedDate.toLocaleString(DateTime.TIME_SIMPLE);
         meetingInfo.isoDate = parsedDate.toISO();
+        meetingInfo.channelId = message.channel.id;
+        meetingInfo.reminderSent = false;
 
         let eventUrl = null;
         try {
@@ -1021,6 +1084,7 @@ client.on("messageCreate", async (message) => {
 
         storage.meetingInfo = meetingInfo;
         await saveStorage(storage);
+        scheduleMeetingReminder();
 
         console.log(`✅ [${currentCount}] Meeting set successfully`);
         
@@ -1068,10 +1132,13 @@ client.on("messageCreate", async (message) => {
           time: null,
           eventId: null,
           isoDate: null,
+          channelId: null,
+          reminderSent: false,
         };
         
         storage.meetingInfo = meetingInfo;
         await saveStorage(storage);
+        scheduleMeetingReminder();  // clear scheduled reminder if it's running
         
         responseMessage += "✅ **Meeting data cleared!**\n";
         
