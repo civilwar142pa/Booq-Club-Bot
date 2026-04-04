@@ -408,14 +408,11 @@ const client = new Client({
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.GuildScheduledEvents,
   ],
-  // Enable WebSocket debugging for more detailed connection logs
-  ws: {
-    properties: { $browser: 'Discord iOS' }, // Mimic a mobile client to potentially bypass some server-side checks if any
-    version: 9, // Use WebSocket protocol version 9
-    compress: true, // Enable WebSocket compression
-    debug: true, // Enable debug logging for WebSocket events
-  },
 });
+
+// Add debug and warn listeners to track down the silent login hang
+client.on("debug", console.log);
+client.on("warn", console.warn);
 
 const PREFIX = "!";
 
@@ -438,8 +435,6 @@ async function initializeBot() {
         currentPoint = storage.readingPoint;
         meetingInfo = storage.meetingInfo || meetingInfo;
         console.log("📥 Loaded data from database");
-      await loadActivePolls(); // Load and reschedule active polls
-      scheduleMeetingReminder();
       }
     } catch (error) {
       console.error("❌ MongoDB Connection Error:", error);
@@ -496,12 +491,15 @@ async function initializeBot() {
   }
 }
 
-client.once("clientReady", () => { // Updated from 'ready' to 'clientReady'
+client.once("ready", () => {
   console.log(`✅ Logged in as ${client.user.tag}!`);
   console.log(`📊 Bot is in ${client.guilds.cache.size} server(s)`);
   console.log(`🆔 Session ID: ${SESSION_ID}`);
   console.log(`📖 Loaded reading point: ${currentPoint}`);
   console.log(`📅 Loaded meeting info:`, meetingInfo);
+
+  loadActivePolls(); // Load and reschedule active polls
+  scheduleMeetingReminder();
 
   // START UPTIMEROBOT HEARTBEATS
   uptimeMonitor.startHeartbeats(60000); // Every 60 seconds
