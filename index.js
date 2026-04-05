@@ -1,3 +1,4 @@
+require('dotenv').config();
 const dns = require("node:dns");
 dns.setDefaultResultOrder("ipv4first"); // Fixes Node.js 18+ DNS IPv6 resolution hangs
 const { Client, ActivityType, EmbedBuilder, GatewayIntentBits, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
