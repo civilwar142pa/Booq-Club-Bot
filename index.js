@@ -1,4 +1,5 @@
 const dns = require("node:dns");
+const { Client, GatewayIntentBits } = require('discord.js');
 dns.setDefaultResultOrder("ipv4first"); // Fixes Node.js 18+ DNS IPv6 resolution hangs
 const { Client, ActivityType, EmbedBuilder, GatewayIntentBits, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
 const express = require("express"); //
