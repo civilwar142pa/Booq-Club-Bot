@@ -479,6 +479,18 @@ async function initializeBot() {
     } catch (error) {
       clearTimeout(loginTimeoutId); // Also clear timeout if login fails for other reasons
       retryCount++;
+
+      //check for rate limit error
+      if (error.status === 429 || error.message.includes("429")) {
+        //check for retry time in error
+        const retryAfter = (error.retryAfter || 300) * 1000;
+        console.error(`🛑 Rate Limited! Discord says wait ${retryAfter / 1000} seconds.`);
+
+        //wait until time Discord says
+        await new Promise((resolve) => setTimeout(resolve, retryAfter));
+        continue;
+      }
+
       let errorMessage = `❌ Discord login failed (Attempt ${retryCount}/${maxLoginRetries}): ${error.message}`;
       if (error.code) {
         errorMessage += ` (Discord.js Error Code: ${error.code})`;
