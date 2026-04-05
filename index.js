@@ -181,6 +181,10 @@ async function sendMeetingReminder() {
         .setTitle('⏰ Book Club Meeting Reminder!')
         .setDescription(`Our next meeting is in **2 days** on **${formattedDate}**!\n\nRead now or else!`)
         .setTimestamp();
+        
+      if (currentPoint) {
+        reminderEmbed.addFields({ name: '📖 Reading Point', value: currentPoint });
+      }
       
       await channel.send({ content: '@everyone', embeds: [reminderEmbed] });
       console.log(`✅ Sent 2-day meeting reminder in channel ${channel.name}`);
