@@ -274,87 +274,6 @@ async function saveStorage(newStorage) {
   }
 }
 
-// UPTIMEROBOT HEARTBEAT MONITORING
-class UptimeRobotMonitor {
-  constructor() {
-    this.heartbeatUrl = process.env.UPTIMEROBOT_HEARTBEAT_URL;
-    this.isEnabled = !!this.heartbeatUrl;
-    this.failCount = 0;
-    this.maxFails = 3;
-  }
-
-  async sendHeartbeat() {
-    if (!this.isEnabled) {
-      return false;
-    }
-
-    try {
-      const response = await fetch(this.heartbeatUrl);
-
-      if (response.ok) {
-        if (this.failCount > 0) {
-          console.log(
-            `✅ UptimeRobot heartbeat restored after ${this.failCount} failures`,
-          );
-          this.failCount = 0;
-        } else {
-          console.log("✅ UptimeRobot heartbeat sent");
-        }
-        return true;
-      } else {
-        this.failCount++;
-        console.warn(
-          `⚠️ UptimeRobot heartbeat failed (HTTP ${response.status}) - Attempt ${this.failCount}/${this.maxFails}`,
-        );
-        return false;
-      }
-    } catch (error) {
-      this.failCount++;
-      console.warn(
-        `⚠️ UptimeRobot heartbeat error: ${error.message} - Attempt ${this.failCount}/${this.maxFails}`,
-      );
-
-      // Disable after too many failures to avoid spam
-      if (this.failCount >= this.maxFails) {
-        console.error(
-          "🔴 UptimeRobot heartbeat disabled due to repeated failures",
-        );
-        this.isEnabled = false;
-      }
-      return false;
-    }
-  }
-
-  startHeartbeats(interval = 60000) {
-    // Default: 1 minute
-    if (!this.isEnabled) {
-      console.log(
-        "ℹ️ UptimeRobot heartbeat not configured - set UPTIMEROBOT_HEARTBEAT_URL environment variable",
-      );
-      return;
-    }
-
-    console.log("🔔 Starting UptimeRobot heartbeat monitoring...");
-
-    // Send initial heartbeat
-    this.sendHeartbeat();
-
-    // Set up regular heartbeats
-    this.heartbeatInterval = setInterval(() => {
-      this.sendHeartbeat();
-    }, interval);
-  }
-
-  stopHeartbeats() {
-    if (this.heartbeatInterval) {
-      clearInterval(this.heartbeatInterval);
-      console.log("🛑 UptimeRobot heartbeats stopped");
-    }
-  }
-}
-
-// Initialize UptimeRobot monitor
-const uptimeMonitor = new UptimeRobotMonitor();
 
 // SIMPLE EXPRESS SERVER FOR INTERNAL USE
 const app = express();
@@ -520,8 +439,6 @@ client.once("ready", () => {
   loadActivePolls(); // Load and reschedule active polls
   scheduleMeetingReminder();
 
-  // START UPTIMEROBOT HEARTBEATS
-  uptimeMonitor.startHeartbeats(60000); // Every 60 seconds
 
   // DISCORD-BASED KEEP ALIVE SYSTEM
   setInterval(
@@ -555,27 +472,6 @@ client.once("ready", () => {
     status: "online",
   });
 });
-
-// INTERNAL SELF-PINGING (no external dependencies)
-function internalKeepAlive() {
-  // Simple internal HTTP request to our own server
-  fetch(`http://localhost:${port}`)
-    .then((response) => response.json())
-    .then((data) => {
-      console.log(
-        `🔁 Internal keep-alive - ${data.uptime} - ${new Date().toLocaleTimeString()}`,
-      );
-    })
-    .catch((error) => {
-      console.log("⚠️ Internal ping failed (normal during startup)");
-    });
-}
-
-// Internal self-ping every 3 minutes
-setInterval(internalKeepAlive, 3 * 60 * 1000);
-
-// Start internal pinging after 30 seconds
-setTimeout(internalKeepAlive, 30000);
 
 // Improved date parsing with UK timezone
 function parseMeetingDateTime(dateStr, timeStr) {
