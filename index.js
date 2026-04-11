@@ -1387,7 +1387,6 @@ process.on("uncaughtException", (error) => {
   console.error("🔴 Uncaught Exception:", error);
   // Removed misleading "Restarting in 10 seconds..." message
   // as process.exit(1) is called immediately.
-  uptimeMonitor.stopHeartbeats();
   process.exit(1); // Exit immediately to ensure log is flushed
 });
 
@@ -1409,7 +1408,6 @@ const gracefulShutdown = async (signal) => {
     process.exit(1);
   }, 5000);
 
-  uptimeMonitor.stopHeartbeats();
   try {
     await mongoose.disconnect();
     await client.destroy();
